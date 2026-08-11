@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Laboratório OCR - Teste de Padrões</title>
+    <!-- Tesseract.js para OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            text-align: center;
+            padding: 15px;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            z-index: 10;
+        }
+
+        h1 { font-size: 1.2rem; color: #38bdf8; }
+        .status { font-size: 0.8rem; color: #94a3b8; margin-top: 5px; }
+
+        .camera-wrapper {
+            position: relative;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Máscara de foco para guiar o usuário e cortar a imagem */
+        .focus-mask {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .target-box {
+            width: 85%;
+            height: 100px; /* Estreito para pegar apenas uma linha de texto */
+            border: 3px solid #38bdf8;
+            border-radius: 8px;
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6); /* Escurece todo o resto */
+            background: transparent;
+            position: relative;
+        }
+
+        .target-box::after {
+            content: "Alinhe o código aqui";
+            position: absolute;
+            bottom: -25px;
+            width: 100%;
+            text-align: center;
+            color: #38bdf8;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .result-panel {
+            background: #1e293b;
+            padding: 20px;
+            border-top: 1px solid #334155;
+            z-index: 10;
+        }
+
+        .result-title {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .result-code {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4ade80;
+            font-family: monospace;
+            word-break: break-all;
+            min-height: 35px;
+        }
+
+        .result-type {
+            display: inline-block;
+            background: #38bdf8;
+            color: #0f172a;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        #logs {
+            font-size: 0.7rem;
+            color: #64748b;
+            margin-top: 10px;
+            max-height: 40px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🧪 Leitor por Padrão de Texto (OCR)</h1>
+        <div class="status" id="status-text">Inicializando Motor de IA...</div>
+    </header>
+
+    <div class="camera-wrapper">
+        <video id="video" playsinline autoplay></video>
+        <div class="focus-mask">
+            <div class="target-box" id="target-box"></div>
+        </div>
+    </div>
+
+    <div class="result-panel">
+        <div class="result-title">Último Código Detectado:</div>
+        <div class="result-code" id="result-code">Aguardando...</div>
+        <div id="result-type-container" style="display: none;">
+            <span class="result-type" id="result-type">TIPO</span>
+        </div>
+        <div id="logs">Carregando pacotes de idioma...</div>
+    </div>
+
+    <!-- Canvas oculto para extrair apenas a área alvo -->
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status-text');
+        const logsText = document.getElementById('logs');
+        const resultCode = document.getElementById('result-code');
+        const resultType = document.getElementById('result-type');
+        const typeContainer = document.getElementById('result-type-container');
+        
+        let isProcessing = false;
+        let tesseractWorker = null;
+        let scanInterval = null;
+
+        // Expressões Regulares Baseadas na sua lógica
+        const patterns = [
+            { 
+                name: "Mercado Livre", 
+                // Exatamente 20000 seguido de 11 números, isolados de outros números
+                regex: /(?<!\d)20000\d{11}(?!\d)/ 
+            },
+            { 
+                name: "Correios", 
+                // 2 letras, 9 números, BR
+                regex: /[A-Z]{2}\d{9}BR/ 
+            },
+            { 
+                name: "Shopee", 
+                // 15 caracteres (letras/números). Limitado com \b para não pegar pedaços maiores.
+                regex: /\b[A-Z0-9]{15}\b/ 
+            },
+            { 
+                name: "TikTok", 
+                // Exatamente 9 dígitos (nem 8, nem 10)
+                regex: /(?<!\d)\d{9}(?!\d)/ 
+            }
+        ];
+
+        async function initOCR() {
+            try {
+                tesseractWorker = await Tesseract.createWorker({
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            logsText.innerText = `Lendo imagem... ${(m.progress * 100).toFixed(0)}%`;
+                        }
+                    }
+                });
+                await tesseractWorker.loadLanguage('eng');
+                await tesseractWorker.initialize('eng');
+                
+                // Configura para ler apenas letras maiúsculas e números para reduzir erros
+                await tesseractWorker.setParameters({
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+                });
+                
+                statusText.innerText = "Motor IA Pronto. Iniciando Câmera...";
+                startCamera();
+            } catch (err) {
+                statusText.innerText = "Erro ao iniciar IA.";
+                console.error(err);
+            }
+        }
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
+                video.srcObject = stream;
+                
+                // Aguarda o vídeo carregar os metadados para saber o tamanho exato
+                video.onloadedmetadata = () => {
+                    statusText.innerText = "Pronto para ler. Alinhe o código.";
+                    statusText.style.color = "#4ade80";
+                    // Tenta ler a cada 1.5 segundos
+                    scanInterval = setInterval(captureAndScan, 1500);
+                };
+            } catch (err) {
+                statusText.innerText = "Erro ao acessar câmera.";
+                console.error(err);
+            }
+        }
+
+        async function captureAndScan() {
+            if (isProcessing) return;
+            isProcessing = true;
+
+            // Lógica para cortar apenas o pedaço da imagem que está no "target-box"
+            const targetBox = document.getElementById('target-box');
+            const boxRect = targetBox.getBoundingClientRect();
+            const videoRect = video.getBoundingClientRect();
+
+            // Calcula a proporção real do vídeo x tamanho na tela
+            const scaleX = video.videoWidth / videoRect.width;
+            const scaleY = video.videoHeight / videoRect.height;
+
+            const cropX = (boxRect.left - videoRect.left) * scaleX;
+            const cropY = (boxRect.top - videoRect.top) * scaleY;
+            const cropW = boxRect.width * scaleX;
+            const cropH = boxRect.height * scaleY;
+
+            canvas.width = cropW;
+            canvas.height = cropH;
+
+            // Desenha apenas o retângulo cortado no canvas
+            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+            // Passa o canvas cortado para o Tesseract
+            try {
+                const { data: { text } } = await tesseractWorker.recognize(canvas);
+                const cleanText = text.replace(/\s+/g, ' ').trim().toUpperCase();
+                
+                logsText.innerText = `Texto bruto lido: "${cleanText}"`;
+                
+                checkPatterns(cleanText);
+            } catch (err) {
+                console.error("Erro na leitura:", err);
+            } finally {
+                isProcessing = false;
+            }
+        }
+
+        function checkPatterns(text) {
+            for (const item of patterns) {
+                const match = text.match(item.regex);
+                if (match) {
+                    const foundCode = match[0];
+                    
+                    // Sucesso visual
+                    resultCode.innerText = foundCode;
+                    resultType.innerText = item.name;
+                    typeContainer.style.display = "block";
+                    
+                    // Som de sucesso (Audio API)
+                    playBeep();
+                    
+                    // Pisca a tela de verde
+                    document.body.style.backgroundColor = "#166534";
+                    setTimeout(() => { document.body.style.backgroundColor = "#0f172a"; }, 300);
+
+                    // Pausa a leitura por 3 segundos para o usuário ver
+                    isProcessing = true;
+                    statusText.innerText = "Capturado! Pausado...";
+                    setTimeout(() => { 
+                        isProcessing = false;
+                        statusText.innerText = "Lendo novamente...";
+                    }, 3000);
+                    
+                    return; // Para no primeiro padrão que encontrar
+                }
+            }
+        }
+
+        function playBeep() {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.15);
+        }
+
+        // Inicializa tudo quando a página carregar
+        window.onload = initOCR;
+    </script>
+</body>
+</html>
