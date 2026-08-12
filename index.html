@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Expedição OCR Universal - DEFINITIVO</title>
+    <title>Expedição OCR Universal - V6 Blindada</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -78,6 +78,10 @@
         let audioCtx = null;
         let currentFacingMode = 'environment';
         
+        // Memória para evitar o loop infinito de apito na mesma caixa
+        let lastScannedCode = "";
+        let lastScanTime = 0;
+        
         const video = document.getElementById('video');
         const procCanvas = document.getElementById('proc-canvas');
         const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
@@ -92,14 +96,9 @@
             await initOCR();
             await startCamera();
             
-            // Inicia o contexto de áudio
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Destrava o áudio no primeiro toque na tela (exigência de navegadores mobile)
             document.body.addEventListener('click', () => {
-                if (audioCtx && audioCtx.state === 'suspended') {
-                    audioCtx.resume();
-                }
+                if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
             }, { once: true });
 
             setInterval(captureAndRecognize, 450);
@@ -141,7 +140,7 @@
                 });
                 video.srcObject = stream;
             } catch (e) {
-                alert("Erro ao abrir câmera. Verifique se o site está rodando em HTTPS: " + e.message);
+                alert("Erro na câmera: " + e.message);
             }
         }
 
@@ -170,8 +169,6 @@
             procCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
             const imgData = procCtx.getImageData(0, 0, cropW, cropH);
-
-            // FILTRO DE LUMINÂNCIA (Impede leitura com câmera tampada / no escuro)
             if (isTooDark(imgData)) return;
 
             isProcessing = true;
@@ -181,7 +178,10 @@
             } catch (e) {
                 console.error(e);
             } finally {
-                isProcessing = false;
+                // Apenas libera para o próximo frame de busca se não tiver travado com sucesso/erro
+                if (document.getElementById('feedback-overlay').style.display !== 'flex') {
+                    isProcessing = false;
+                }
             }
         }
 
@@ -191,18 +191,15 @@
             for (let i = 0; i < pixels.length; i += 16) {
                 total += (0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2]);
             }
-            return (total / (pixels.length / 16)) < 35; // Se escuro, aborta
+            return (total / (pixels.length / 16)) < 35;
         }
 
-        // MOTOR DE AVALIAÇÃO MULTIMERCADO DEFINITIVO
         function evaluateText(rawText) {
-            // Quebra o texto e limpa lixo
             const tokens = rawText.split(/[\s\n\r]+/).map(t => t.replace(/[^A-Z0-9]/g, '')).filter(t => t.length >= 8);
 
             for (const token of tokens) {
                 let code = null;
                 let type = "";
-
                 const numOnly = normalizeNum(token);
 
                 // 1. Mercado Livre (16 dígitos)
@@ -210,13 +207,13 @@
                     code = numOnly;
                     type = "MERCADO LIVRE";
                 }
-                // 2. Correios (2 Letras + 9 Números + BR ou 8R)
+                // 2. Correios (2 Letras + 9 Números + BR/8R)
                 else if (token.length === 13) {
                     const prefix = token.substring(0, 2).replace(/[0-9]/g, 'A');
                     const middle = normalizeNum(token.substring(2, 11));
                     const suffix = token.substring(11, 13);
                     if (/^[A-Z]{2}$/.test(prefix) && /^\d{9}$/.test(middle) && (suffix === "BR" || suffix === "8R")) {
-                        code = prefix + middle + "BR"; // Força terminar em BR se leu 8R
+                        code = prefix + middle + "BR";
                         type = "CORREIOS";
                     }
                 }
@@ -225,15 +222,27 @@
                     code = numOnly;
                     type = "TIKTOK";
                 }
-                // 4. Shopee / Outros (Alfanumérico Genérico Válido)
-                else if (/^[A-Z0-9]{10,18}$/.test(token)) {
-                    code = token;
-                    type = "SHOPEE / OUTROS";
+                // 4. Shopee / Outros (CORRIGIDO: Bloqueia leitura de nomes e endereços)
+                else {
+                    const digitCount = (token.match(/\d/g) || []).length;
+                    // Só aceita se tiver entre 10 e 18 caracteres E pelo menos 4 NÚMEROS no meio.
+                    if (token.length >= 10 && token.length <= 18 && digitCount >= 4 && /^[A-Z0-9]+$/.test(token)) {
+                        code = token;
+                        type = "SHOPEE / OUTROS";
+                    }
                 }
 
                 if (code) {
+                    // ANTI-METRALHADORA: Evita bipar o MESMO código repetidamente em menos de 4 segundos
+                    if (code === lastScannedCode && (Date.now() - lastScanTime) < 4000) {
+                        break; 
+                    }
+                    
+                    lastScannedCode = code;
+                    lastScanTime = Date.now();
+                    
                     handleCodeScanned(code, type);
-                    break; // Sai do loop para processar só 1 código por vez
+                    break; 
                 }
             }
         }
@@ -244,11 +253,9 @@
 
         function handleCodeScanned(code, type) {
             if (scannedCodes.has(code)) {
-                // DUPLICIDADE DETECTADA - TELA VERMELHA E ALARME GRAVE
                 playAudio(false);
                 showOverlay(`⚠️ DUPLICADO (${type})`, code, false);
             } else {
-                // NOVO CÓDIGO - TELA VERDE E BIPE DE SUCESSO
                 scannedCodes.set(code, type);
                 saveData();
                 playAudio(true);
@@ -263,12 +270,14 @@
 
             overlay.className = isSuccess ? 'bg-success' : 'bg-duplicate';
             overlay.style.display = 'flex';
+            
+            isProcessing = true; // Trava o motor OCR
 
-            isProcessing = true; // Trava leituras enquanto o overlay aparece
+            // TRAVA EXATA DE 2 SEGUNDOS DEPOIS DA LEITURA
             setTimeout(() => {
                 overlay.style.display = 'none';
-                isProcessing = false;
-            }, isSuccess ? 1000 : 2000); // 1 segundo pra sucesso, 2 segundos pra erro
+                isProcessing = false; // Libera o motor
+            }, 2000); 
         }
 
         function playAudio(isSuccess) {
