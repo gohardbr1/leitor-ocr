@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Expedição OCR Universal - V6 Blindada</title>
+    <title>Expedição OCR Universal - V7 Blindagem Total</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -78,7 +78,6 @@
         let audioCtx = null;
         let currentFacingMode = 'environment';
         
-        // Memória para evitar o loop infinito de apito na mesma caixa
         let lastScannedCode = "";
         let lastScanTime = 0;
         
@@ -178,7 +177,6 @@
             } catch (e) {
                 console.error(e);
             } finally {
-                // Apenas libera para o próximo frame de busca se não tiver travado com sucesso/erro
                 if (document.getElementById('feedback-overlay').style.display !== 'flex') {
                     isProcessing = false;
                 }
@@ -194,56 +192,67 @@
             return (total / (pixels.length / 16)) < 35;
         }
 
+        // MOTOR V7 - IMUNE À ALUCINAÇÕES E CORTES
         function evaluateText(rawText) {
-            const tokens = rawText.split(/[\s\n\r]+/).map(t => t.replace(/[^A-Z0-9]/g, '')).filter(t => t.length >= 8);
+            // Tira todos os espaços para colar eventuais cortes ("AP3200" + " " + "BR" vira "AP3200BR")
+            const flatText = rawText.replace(/[^A-Z0-9]/g, '');
+            let code = null;
+            let type = "";
 
-            for (const token of tokens) {
-                let code = null;
-                let type = "";
-                const numOnly = normalizeNum(token);
+            // 1. CORREIOS BLINDADO
+            // Busca o padrão exato: 2 letras seguidas de 9 números, em qualquer lugar do texto
+            const matchCorreios = flatText.match(/([A-Z]{2})(\d{9})/);
+            
+            if (matchCorreios) {
+                let prefix = matchCorreios[1];
+                let middle = normalizeNum(matchCorreios[2]);
+                code = prefix + middle + "BR"; // Reconstrói perfeito com BR no final
+                type = "CORREIOS";
+            }
+            // 2. MERCADO LIVRE
+            else if (/(20000\d{11}|\d{16})/.test(flatText)) {
+                const matchML = flatText.match(/(20000\d{11}|\d{16})/);
+                code = matchML[0];
+                type = "MERCADO LIVRE";
+            }
+            // 3. TIKTOK E SHOPEE / OUTROS (Análise Token por Token)
+            else {
+                const tokens = rawText.split(/[\s\n\r]+/).map(t => t.replace(/[^A-Z0-9]/g, '')).filter(t => t.length >= 8);
+                
+                for (const token of tokens) {
+                    const numOnly = normalizeNum(token);
 
-                // 1. Mercado Livre (16 dígitos)
-                if (/^20000\d{11}$/.test(numOnly) || /^\d{16}$/.test(numOnly)) {
-                    code = numOnly;
-                    type = "MERCADO LIVRE";
-                }
-                // 2. Correios (2 Letras + 9 Números + BR/8R)
-                else if (token.length === 13) {
-                    const prefix = token.substring(0, 2).replace(/[0-9]/g, 'A');
-                    const middle = normalizeNum(token.substring(2, 11));
-                    const suffix = token.substring(11, 13);
-                    if (/^[A-Z]{2}$/.test(prefix) && /^\d{9}$/.test(middle) && (suffix === "BR" || suffix === "8R")) {
-                        code = prefix + middle + "BR";
-                        type = "CORREIOS";
+                    // TIKTOK (Exatos 9 Números)
+                    if (/^\d{9}$/.test(numOnly) && token.length === 9) {
+                        code = numOnly;
+                        type = "TIKTOK";
+                        break;
                     }
-                }
-                // 3. TikTok (Exatos 9 Números)
-                else if (/^\d{9}$/.test(numOnly) && token.length === 9) {
-                    code = numOnly;
-                    type = "TIKTOK";
-                }
-                // 4. Shopee / Outros (CORRIGIDO: Bloqueia leitura de nomes e endereços)
-                else {
+                    
+                    // SHOPEE / OUTROS (Filtro Rigoroso)
                     const digitCount = (token.match(/\d/g) || []).length;
-                    // Só aceita se tiver entre 10 e 18 caracteres E pelo menos 4 NÚMEROS no meio.
-                    if (token.length >= 10 && token.length <= 18 && digitCount >= 4 && /^[A-Z0-9]+$/.test(token)) {
-                        code = token;
-                        type = "SHOPEE / OUTROS";
-                    }
-                }
+                    
+                    if (token.length >= 10 && token.length <= 18 && digitCount >= 4) {
+                        // A TRAVA AQUI: Se tiver letras misturadas, é OBRIGATÓRIO começar com pelo menos 2 letras.
+                        // Isso mata códigos alucinados pelo OCR como "C9912278851" (que só começa com 1 letra)
+                        const isAllNumbers = /^\d+$/.test(numOnly); // Jadlog e afins (só números) = LIBERADO
+                        const startsWithTwoLetters = /^[A-Z]{2,}/.test(token); // BR21..., TEX... = LIBERADO
 
-                if (code) {
-                    // ANTI-METRALHADORA: Evita bipar o MESMO código repetidamente em menos de 4 segundos
-                    if (code === lastScannedCode && (Date.now() - lastScanTime) < 4000) {
-                        break; 
+                        if (isAllNumbers || startsWithTwoLetters) {
+                            code = token;
+                            type = "SHOPEE / OUTROS";
+                            break;
+                        }
                     }
-                    
-                    lastScannedCode = code;
-                    lastScanTime = Date.now();
-                    
-                    handleCodeScanned(code, type);
-                    break; 
                 }
+            }
+
+            if (code) {
+                if (code === lastScannedCode && (Date.now() - lastScanTime) < 4000) return; 
+                
+                lastScannedCode = code;
+                lastScanTime = Date.now();
+                handleCodeScanned(code, type);
             }
         }
 
@@ -271,12 +280,11 @@
             overlay.className = isSuccess ? 'bg-success' : 'bg-duplicate';
             overlay.style.display = 'flex';
             
-            isProcessing = true; // Trava o motor OCR
+            isProcessing = true; 
 
-            // TRAVA EXATA DE 2 SEGUNDOS DEPOIS DA LEITURA
             setTimeout(() => {
                 overlay.style.display = 'none';
-                isProcessing = false; // Libera o motor
+                isProcessing = false;
             }, 2000); 
         }
 
