@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Expedição OCR Pro Anti-Fantasma</title>
+    <title>Expedição OCR Pro V2 - Security Interval</title>
     <!-- Tesseract.js v5 - Motor OCR Neural -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
@@ -46,13 +46,10 @@
         .sync-ok { background: #166534; color: #4ade80; }
         .sync-pending { background: #854d0e; color: #fef08a; }
 
-        /* MODAIS DE FEEDBACK (Sucesso vs Duplicidade) */
-        #feedback-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; }
-        .overlay-success { background-color: rgba(22, 101, 52, 0.95); }
-        .overlay-duplicate { background-color: rgba(185, 28, 28, 0.95); }
-        
-        .feedback-title { font-size: 1.8rem; font-weight: 900; color: #fff; margin-bottom: 8px; }
-        .feedback-code { font-size: 1.2rem; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 8px; color: #f8fafc; font-family: monospace; }
+        #feedback-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; background-color: rgba(22, 101, 52, 0.95); animation: pulse 0.3s ease-in-out; }
+        .feedback-title { font-size: 2rem; font-weight: 900; color: #fff; margin-bottom: 8px; }
+        .feedback-code { font-size: 1.2rem; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 8px; color: #f8fafc; font-family: monospace; }
+        @keyframes pulse { 0% { transform: scale(0.9); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
         
         canvas { display: none; }
     </style>
@@ -60,18 +57,18 @@
 <body>
 
     <header>
-        <h1>🔍 OCR Pro Expedição</h1>
+        <h1>📦 Expedição OCR Pro V2</h1>
         <div id="net-badge" class="net-status net-online">ONLINE</div>
     </header>
 
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-value" id="count-total">0</div>
-            <div class="stat-label">Lidos Hoje</div>
+            <div class="stat-label">Conferidos Hoje</div>
         </div>
         <div class="stat-card">
             <div class="stat-value" style="color: #fef08a;" id="count-pending">0</div>
-            <div class="stat-label">Fila Sync</div>
+            <div class="stat-label">Fila Offline</div>
         </div>
         <div class="stat-card">
             <div class="stat-value" style="color: #38bdf8;" id="engine-state">CARREGANDO</div>
@@ -79,7 +76,7 @@
         </div>
     </div>
 
-    <div class="ocr-status" id="ocr-status-text">Iniciando inteligência de visão...</div>
+    <div class="ocr-status" id="ocr-status-text">Iniciando motor de visão...</div>
 
     <div class="camera-container">
         <video id="video" playsinline autoplay></video>
@@ -96,7 +93,7 @@
             <span>🔗 INTEGRAÇÃO GOOGLE SHEETS</span>
             <span id="sync-status" style="color: #4ade80; font-size:0.65rem;">Sincronizado</span>
         </div>
-        <input type="text" id="sheets-url" placeholder="URL do AppScript Web App..." onchange="saveSettings()">
+        <input type="text" id="sheets-url" placeholder="URL do Apps Script (Web App)..." onchange="saveSettings()">
     </div>
 
     <div class="list-container">
@@ -108,31 +105,29 @@
     </div>
 
     <div id="feedback-overlay">
-        <div class="feedback-title" id="feedback-title">✓ LIDO COM SUCESSO</div>
+        <div class="feedback-title">✓ CONFERIDO</div>
         <div class="feedback-code" id="feedback-code">---</div>
     </div>
 
     <canvas id="proc-canvas"></canvas>
 
     <script>
-        // === VARIÁVEIS DE ESTADO E PERSISTÊNCIA ===
-        let scannedCodes = new Map(); // Code -> { time, synced }
+        // === CONFIGURAÇÕES OPERACIONAIS ===
+        const SECURITY_INTERVAL_MS = 2000; // Trava global de 2 segundos entre bips operacionais
+
+        // === ESTADO GLOBAL E PERSISTÊNCIA ===
+        let scannedCodes = new Map(); // Código -> { hora, sincronizado }
         let isProcessing = false;
         let isOcrReady = false;
+        let lockoutActive = false; // Trava de segurança operativa
         let currentFacingMode = 'environment';
         let torchActive = false;
         
-        // Mecanismo Debounce
-        let lastScannedCode = null;
-        let lastScanTime = 0;
-
-        // Motores
         let ocrWorker = null;
         let videoStream = null;
         let audioCtx = null;
         let scanInterval = null;
 
-        // Elementos DOM
         const video = document.getElementById('video');
         const targetBox = document.getElementById('target-box');
         const procCanvas = document.getElementById('proc-canvas');
@@ -141,7 +136,7 @@
         const engineState = document.getElementById('engine-state');
 
         const todayStr = new Date().toISOString().split('T')[0];
-        const STORAGE_KEY = 'expedicao_pro_' + todayStr;
+        const STORAGE_KEY = 'conferencia_pro_' + todayStr;
 
         window.onload = async function() {
             setupNetworkAndVisibilityListeners();
@@ -149,39 +144,43 @@
             loadSavedData();
             await initOcrEngine();
             startCamera();
-            setInterval(processPendingSyncQueue, 5000); // Tenta sincronizar a fila a cada 5 segundos
+            setInterval(processPendingSyncQueue, 5000); // Tenta sincronizar a cada 5 segundos
         };
 
-        // 1. INICIALIZAÇÃO DO TESSERACT
+        // 1. INICIALIZAÇÃO DO TESSERACT (Otimizado com Whitelist)
         async function initOcrEngine() {
             try {
-                ocrStatusText.innerText = "Carregando rede neural OCR...";
+                ocrStatusText.innerText = "Carregando inteligência alfanumérica...";
                 
+                // Usando Worker 'eng' padrão para números e letras alfanuméricas
                 ocrWorker = await Tesseract.createWorker('eng');
+                
+                // Whitelist rigorosa: Apenas letras maiúsculas e números
                 await ocrWorker.setParameters({
                     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // Otimizado para um bloco de texto impresso
                 });
 
                 isOcrReady = true;
                 engineState.innerText = "PRONTO";
                 engineState.style.color = "#4ade80";
-                ocrStatusText.innerText = "Aproxime a mira do código da etiqueta";
+                ocrStatusText.innerText = "Aproxime a mira amarela do código impresso";
                 ocrStatusText.style.color = "#4ade80";
             } catch (err) {
                 engineState.innerText = "ERRO";
                 engineState.style.color = "#ef4444";
-                ocrStatusText.innerText = "Erro ao carregar OCR: " + err.message;
+                ocrStatusText.innerText = "Falha no motor OCR: " + err.message;
             }
         }
 
-        // 2. GERENCIAMENTO DE CÂMERA
+        // 2. GERENCIAMENTO DE CÂMERA (Lanterna, Troca)
         async function startCamera() {
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
             }
 
             try {
+                // Constraints para garantir foco contínuo e resolução ideal
                 const constraints = {
                     video: {
                         facingMode: currentFacingMode,
@@ -195,7 +194,7 @@
                 video.srcObject = videoStream;
                 video.onloadedmetadata = () => startScanLoop();
             } catch (err) {
-                alert("Erro ao acessar câmera: " + err.message);
+                alert("Erro ao abrir câmera. Verifique permissões.");
             }
         }
 
@@ -205,7 +204,7 @@
             const capabilities = track.getCapabilities ? track.getCapabilities() : {};
 
             if (!capabilities.torch) {
-                alert("Lanterna não suportada neste dispositivo.");
+                alert("Lanterna não suportada neste modo/câmera.");
                 return;
             }
 
@@ -213,21 +212,20 @@
                 torchActive = !torchActive;
                 await track.applyConstraints({ advanced: [{ torch: torchActive }] });
                 document.getElementById('btn-torch').classList.toggle('active', torchActive);
-            } catch (e) {
-                console.error("Erro lanterna:", e);
-            }
+            } catch (e) { console.error(e); }
         }
 
         function toggleCamera() {
             currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
-            torchActive = false;
+            torchActive = false; // Desliga lanterna ao trocar
             document.getElementById('btn-torch').classList.remove('active');
             startCamera();
         }
 
         function startScanLoop() {
             if (scanInterval) clearInterval(scanInterval);
-            scanInterval = setInterval(captureAndRecognize, 400); // 400ms = excelente equilíbrio performance/precisão
+            // Captura frame a cada 450ms para análise OCR
+            scanInterval = setInterval(captureAndRecognize, 450); 
         }
 
         function stopScanLoop() {
@@ -237,15 +235,15 @@
             }
         }
 
-        // 3. CAPTURA COM FILTRO ANTI-FANTASMA (CORREÇÃO DE FANTASMAS)
+        // 3. VISÃO COMPUTACIONAL: CAPTURA E PRÉ-PROCESSAMENTO ADAPTATIVO
         async function captureAndRecognize() {
+            // Não processa se: IA não carregou, já está processando, ou câmera não carregou
             if (!isOcrReady || isProcessing || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
             const boxRect = targetBox.getBoundingClientRect();
             const videoRect = video.getBoundingClientRect();
-            if (videoRect.width === 0 || videoRect.height === 0) return;
 
-            // Compensação Geométrica object-fit: cover
+            // Lógica de Geometria Sagrada (Crop Exato baseado em object-fit: cover)
             const intrinsicW = video.videoWidth;
             const intrinsicH = video.videoHeight;
             const elemW = videoRect.width;
@@ -274,20 +272,15 @@
 
             if (cropW <= 0 || cropH <= 0) return;
 
+            // Renderiza no canvas com ampliação de 2x para auxiliar o OCR
             const scaleFactor = 2;
             procCanvas.width = cropW * scaleFactor;
             procCanvas.height = cropH * scaleFactor;
 
             procCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, procCanvas.width, procCanvas.height);
 
-            // === FILTRO ANTI-FANTASMA: Avalia luminância e variância antes do OCR ===
-            const imgData = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
-            if (isImageTooDarkOrUniform(imgData)) {
-                return; // ABORTA O CICLO SE A IMAGEM ESTIVER TAMPADA OU SEM TEXTO
-            }
-
-            // Binarização Adaptativa (Alto Contraste)
-            applyAdaptiveThresholding(procCtx, imgData);
+            // === PRÉ-PROCESSAMENTO OPERACIONAL (Binarização Adaptativa) ===
+            applyAdaptiveThresholding(procCtx, procCanvas.width, procCanvas.height);
 
             isProcessing = true;
 
@@ -297,88 +290,69 @@
                     evaluateTextTokens(text);
                 }
             } catch (e) {
-                console.error("Erro OCR:", e);
+                console.error("Erro no reconhecimento OCR:", e);
             } finally {
                 isProcessing = false;
             }
         }
 
-        // VALIDADOR ANTI-FANTASMA: Impede leitura se a câmera tiver tampada
-        function isImageTooDarkOrUniform(imgData) {
+        // Binarização Adaptativa: Converte imagem para P&B puro com base na iluminação local do recorte
+        function applyAdaptiveThresholding(ctx, width, height) {
+            const imgData = ctx.getImageData(0, 0, width, height);
             const pixels = imgData.data;
-            const len = pixels.length;
-            const numPixels = len / 4;
-            let totalLuma = 0;
+            const numPixels = width * height;
 
-            for (let i = 0; i < len; i += 4) {
-                totalLuma += (0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2]);
+            // Calcula luminância média rápida
+            let totalLuma = 0;
+            for (let i = 0; i < pixels.length; i += 4) {
+                // Fórmula de luminância padrão BT.709
+                const luma = (0.2126 * pixels[i]) + (0.7152 * pixels[i+1]) + (0.0722 * pixels[i+2]);
+                totalLuma += luma;
             }
             const avgLuma = totalLuma / numPixels;
 
-            // Se for muito escuro (câmera tampada < 35) ou extremamente brilhante estourado (> 245)
-            if (avgLuma < 35 || avgLuma > 245) return true;
-
-            // Teste de variância/contraste (Câmera tampada tem pouca variância entre pixels)
-            let varianceSum = 0;
-            const step = 40; // amostragem rápida
-            for (let i = 0; i < len; i += step) {
-                const luma = (0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2]);
-                varianceSum += Math.abs(luma - avgLuma);
-            }
-            const avgVariance = varianceSum / (numPixels / (step / 4));
-
-            // Se o contraste for muito baixo (< 14), é apenas uma superfície lisa (não há texto real impresso)
-            if (avgVariance < 14) return true;
-
-            return false;
-        }
-
-        function applyAdaptiveThresholding(ctx, imgData) {
-            const pixels = imgData.data;
-            let totalLuma = 0;
-            for (let i = 0; i < pixels.length; i += 4) {
-                totalLuma += (0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2]);
-            }
-            const avgLuma = totalLuma / (pixels.length / 4);
-            const threshold = avgLuma * 0.85; // Limiar dinâmico
+            // Limiar dinâmico (um pouco abaixo da média para escurecer o texto térmica)
+            const threshold = avgLuma * 0.88; 
 
             for (let i = 0; i < pixels.length; i += 4) {
-                const luma = 0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2];
-                const v = luma < threshold ? 0 : 255;
+                const luma = (0.2126 * pixels[i]) + (0.7152 * pixels[i+1]) + (0.0722 * pixels[i+2]);
+                const v = luma < threshold ? 0 : 255; // P&B Puro
                 pixels[i] = pixels[i + 1] = pixels[i + 2] = v;
             }
             ctx.putImageData(imgData, 0, 0);
         }
 
-        // 4. AVALIAÇÃO DE TOKENS E NORMALIZAÇÃO
+        // 4. AVALIAÇÃO DE PADRÕES E NORMALIZAÇÃO DE ERROS DO OCR
         function evaluateTextTokens(rawText) {
+            // Separa blocos de palavras isoladas
             const rawTokens = rawText.split(/[\s\n\r]+/).map(t => t.replace(/[^A-Z0-9]/g, '')).filter(t => t.length >= 8);
 
             for (const token of rawTokens) {
                 let matchedCode = null;
 
-                // Mercado Livre (16 Dígitos - Ex: 20000...)
+                // --- TESTE 1: MERCADO LIVRE (16 Dígitos numéricos iniciando em 20000) ---
+                // Aplica normalização inteligente (troca O por 0, I por 1, etc) antes do regex numérico
                 const mlNormalized = normalizeToNumeric(token);
                 if (/^20000\d{11}$/.test(mlNormalized)) {
                     matchedCode = mlNormalized;
                 }
 
-                // Correios (2 Letras + 9 Dígitos + BR)
+                // --- TESTE 2: CORREIOS (2 Letras + 9 Dígitos + BR) ---
                 if (!matchedCode && token.length === 13) {
-                    const prefix = token.substring(0, 2).replace(/[0-9]/g, 'A');
-                    const middle = normalizeToNumeric(token.substring(2, 11));
+                    const prefix = token.substring(0, 2).replace(/[0-9]/g, 'A'); // Força letras no início
+                    const middle = normalizeToNumeric(token.substring(2, 11)); // Normaliza números no meio
                     const suffix = token.substring(11, 13);
                     if (/^[A-Z]{2}$/.test(prefix) && /^\d{9}$/.test(middle) && (suffix === "BR" || suffix === "8R")) {
                         matchedCode = prefix + middle + "BR";
                     }
                 }
 
-                // Shopee (Apenas 15 alfanuméricos)
+                // --- TESTE 3: SHOPEE (Apenas 15 caracteres alfanuméricos contínuos) ---
                 if (!matchedCode && token.length === 15 && /^[A-Z0-9]{15}$/.test(token)) {
                     matchedCode = token;
                 }
 
-                // TikTok (Exatamente 9 dígitos numéricos)
+                // --- TESTE 4: TIKTOK (Exatamente 9 dígitos numéricos) ---
                 if (!matchedCode && token.length === 9) {
                     const tiktokNormalized = normalizeToNumeric(token);
                     if (/^\d{9}$/.test(tiktokNormalized)) {
@@ -388,146 +362,180 @@
 
                 if (matchedCode) {
                     processScannedCode(matchedCode);
-                    break;
+                    break; // Processa apenas o primeiro padrão válido encontrado no frame para maior segurança
                 }
             }
         }
 
-        // Normalizador Inteligente (Converte confusões comuns do OCR de letras para números)
+        // Normalizador Inteligente: Corrige confusões comuns do motor OCR de letras por números
         function normalizeToNumeric(str) {
             return str
-                .replace(/O/g, '0')
-                .replace(/I/g, '1')
-                .replace(/L/g, '1')
-                .replace(/S/g, '5')
-                .replace(/B/g, '8')
-                .replace(/Z/g, '2');
+                .replace(/O/g, '0') // Troca 'O' por '0'
+                .replace(/I/g, '1') // Troca 'I' por '1'
+                .replace(/L/g, '1') // Troca 'L' por '1'
+                .replace(/S/g, '5') // Troca 'S' por '5'
+                .replace(/B/g, '8') // Troca 'B' por '8'
+                .replace(/Z/g, '2'); // Troca 'Z' por '2'
         }
 
-        // 5. GERENCIAMENTO DE DUPLICIDADE E FEEDBACKS ATIVOS (MUDANÇAS AQUI)
+        // 5. PROCESSAMENTO CENTRAL E PERSISTÊNCIA (Google Sheets)
         function processScannedCode(cleanCode) {
-            const now = Date.now();
-            
-            // Trava Debounce: Evita processar o mesmo código repetidamente dentro de 2.5 segundos
-            if (cleanCode === lastScannedCode && (now - lastScanTime) < 2500) {
-                return;
-            }
+            // === TRAVA DE SEGURANÇA OPERATIVA (2 SEGUNDOS) ===
+            // Impede bipagens seguidas que confundem o operador e geram duplicidades no Sheets
+            if (lockoutActive) return;
 
-            lastScannedCode = cleanCode;
-            lastScanTime = now;
+            // Verifica duplicidade no Map (Conferidos hoje no dispositivo)
+            if (!scannedCodes.has(cleanCode)) {
+                // === CÓDIGO NOVO DETECTADO ===
+                
+                // Ativa trava operativa imediatamente
+                activateLockout();
 
-            const timeNow = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-            // === VERIFICAÇÃO DE DUPLICIDADE REAL (CORREÇÃO DE DUPLICIDADE) ===
-            if (scannedCodes.has(cleanCode)) {
-                // FEEDBACK ATIVO DE ERRO
-                playDuplicateFeedback();
-                showOverlay(cleanCode, false); // TELA VERMELHA DE ALERTA
-            } else {
-                // CÓDIGO NOVO: SALVA E SINCRONIZA
-                scannedCodes.set(cleanCode, { time: timeNow, synced: false });
+                const timeNow = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                scannedCodes.set(cleanCode, { hora: timeNow, sincronizado: false });
+                
+                // Salva LocalStorage
                 saveData();
                 updateUI();
-                playSuccessFeedback();
-                showOverlay(cleanCode, true); // TELA VERDE DE SUCESSO
-                processPendingSyncQueue();
+                
+                // Feedback operacional imediato
+                playFeedbackSuccess();
+                showOverlay(cleanCode);
+                
+                // Envia para o Sheets (se houver internet)
+                sendToGoogleSheets(cleanCode, timeNow);
             }
+            // Se já existe no Map, o sistema ignora silenciosamente para não atrapalhar o operador
         }
 
-        // FEEDBACKS SONOROS
-        function playSuccessFeedback() {
-            try {
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.frequency.setValueAtTime(1750, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.1);
-            } catch (e) {}
-
-            if (navigator.vibrate) navigator.vibrate(80);
+        // Ativa a trava global de 2 segundos
+        function activateLockout() {
+            lockoutActive = true;
+            engineState.innerText = "ESPERANDO (2s)";
+            engineState.style.color = "#fef08a"; // Amarelo de espera
+            setTimeout(() => {
+                lockoutActive = false;
+                if (isOcrReady) {
+                    engineState.innerText = "PRONTO";
+                    engineState.style.color = "#4ade80";
+                }
+            }, SECURITY_INTERVAL_MS);
         }
 
-        function playDuplicateFeedback() {
+        // 6. FEEDBACK OPERACIONAL (Som e Vibração)
+        function playFeedbackSuccess() {
+            // Sonoro (Beep)
             try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (audioCtx.state === 'suspended') audioCtx.resume();
                 
-                // Dois tons graves em sequência (Tom de Erro)
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
-                osc.frequency.setValueAtTime(150, audioCtx.currentTime + 0.15);
-                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1400, audioCtx.currentTime); // Som médio-agudo agradável
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
                 osc.start();
-                osc.stop(audioCtx.currentTime + 0.35);
-            } catch (e) {}
+                osc.stop(audioCtx.currentTime + 0.12); // Curto e seco
+            } catch(e) {}
 
-            if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
+            // Tátil (Vibração) - Funciona apenas em Android Chrome/Firefox
+            if (navigator.vibrate) {
+                navigator.vibrate(80); // Vibração curta
+            }
         }
 
-        // FEEDBACK VISUAL (OVERLAY VERDE OU VERMELHO)
-        function showOverlay(code, isSuccess) {
-            const overlay = document.getElementById('feedback-overlay');
-            const titleEl = document.getElementById('feedback-title');
-            document.getElementById('feedback-code').innerText = code;
-
-            if (isSuccess) {
-                overlay.className = 'overlay-success';
-                titleEl.innerText = '✓ LIDO COM SUCESSO';
-            } else {
-                overlay.className = 'overlay-duplicate';
-                titleEl.innerText = '⚠️ CÓDIGO JÁ CONFERIDO!';
-            }
-
-            overlay.style.display = 'flex';
-            setTimeout(() => overlay.style.display = 'none', 1300);
+        // 7. ARMAZENAMENTO E SINCRONIZAÇÃO (Google Sheets)
+        function loadSettings() {
+            document.getElementById('sheets-url').value = localStorage.getItem('conf_pro_sheets') || '';
         }
 
-        // 6. GERENCIAMENTO DE SINCRONIZAÇÃO E LOCALSTORAGE (App 1)
-        async function processPendingSyncQueue() {
-            const url = document.getElementById('sheets-url').value.trim();
-            if (!url || !navigator.onLine) return;
+        function saveSettings() {
+            localStorage.setItem('conf_pro_sheets', document.getElementById('sheets-url').value.trim());
+            processPendingSyncQueue(); // Tenta sincronizar ao salvar URL
+        }
 
-            const pendingEntries = Array.from(scannedCodes.entries()).filter(([_, val]) => !val.synced);
-            if (pendingEntries.length === 0) {
-                document.getElementById('sync-status').innerText = "Sincronizado";
-                document.getElementById('sync-status').style.color = "#4ade80";
-                return;
+        function loadSavedData() {
+            const rawData = localStorage.getItem(STORAGE_KEY);
+            if (rawData) {
+                JSON.parse(rawData).forEach(i => scannedCodes.set(i.codigo, { hora: i.hora, sincronizado: i.sincronizado }));
             }
-
-            document.getElementById('sync-status').innerText = "Enviando...";
-            document.getElementById('sync-status').style.color = "#fef08a";
-
-            for (const [code, item] of pendingEntries) {
-                try {
-                    await fetch(url, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ codigo: code, horario: item.time, data: todayStr })
-                    });
-                    
-                    // Com no-cors, se não der erro, consideramos enviado com sucesso
-                    scannedCodes.set(code, { ...item, synced: true });
-                } catch (err) {
-                    console.error("Erro sync código " + code, err);
-                    break; // Interrompe e tenta no próximo ciclo
-                }
-            }
-
-            saveData();
             updateUI();
         }
 
+        function saveData() {
+            // Converte Map para Array serializável
+            const exportable = Array.from(scannedCodes.entries()).map(([c, v]) => ({ codigo: c, hora: v.hora, sincronizado: v.sincronizado }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(exportable));
+        }
+
+        function updateUI() {
+            // Atualiza estatísticas
+            document.getElementById('count-total').innerText = scannedCodes.size;
+            
+            // Conta offline (não sincronizados)
+            let pendingCount = 0;
+            scannedCodes.forEach(v => { if (!v.sincronizado) pendingCount++; });
+            document.getElementById('count-pending').innerText = pendingCount;
+
+            // Atualiza lista na tela
+            const listEl = document.getElementById('scanned-list');
+            listEl.innerHTML = '';
+
+            // Mostra os últimos primeiro
+            Array.from(scannedCodes.entries()).reverse().forEach(([code, item]) => {
+                const badgeClass = item.sincronizado ? 'sync-ok' : 'sync-pending';
+                const badgeText = item.sincronizado ? 'OK' : 'PENDENTE';
+                listEl.innerHTML += `
+                    <li class="scanned-item">
+                        <div>
+                            <span class="scanned-code">${code}</span>
+                            <span style="font-size:0.65rem; color:#64748b; margin-left:6px;">${item.hora}</span>
+                        </div>
+                        <span class="sync-badge ${badgeClass}">${badgeText}</span>
+                    </li>`;
+            });
+        }
+
+        function sendToGoogleSheets(code, time) {
+            const url = document.getElementById('sheets-url').value.trim();
+            if (!url) return;
+
+            // Envio em segundo plano (fetch POST no-cors)
+            fetch(url, {
+                method: 'POST',
+                mode: 'no-cors', // Essencial para burlar CORS em AppScripts Web Apps
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ codigo: code, horario: time, data: todayStr })
+            })
+            .then(() => {
+                // Atualiza Map localmente como sincronizado
+                if (scannedCodes.has(code)) {
+                    scannedCodes.set(code, { ...scannedCodes.get(code), sincronizado: true });
+                    saveData();
+                    updateUI();
+                }
+            })
+            .catch(e => console.error("Falha ao enviar para o Sheets:", e));
+        }
+
+        // Tenta sincronizar registros pendentes na fila offline
+        function processPendingSyncQueue() {
+            const url = document.getElementById('sheets-url').value.trim();
+            if (!url || !navigator.onLine) return;
+
+            scannedCodes.forEach((val, key) => {
+                if (!val.sincronizado) {
+                    sendToGoogleSheets(key, val.hora);
+                }
+            });
+        }
+
+        // 8. EVENT LISTENERS DE REDE E VISIBILIDADE
         function setupNetworkAndVisibilityListeners() {
+            // Monitoramento de Rede
             window.addEventListener('online', updateNetworkStatus);
             window.addEventListener('offline', updateNetworkStatus);
             updateNetworkStatus();
@@ -535,9 +543,9 @@
             // Economia de Bateria / Visibility API
             document.addEventListener('visibilitychange', () => {
                 if (document.hidden) {
-                    stopScanLoop();
+                    stopScanLoop(); // Pára câmera se a aba ocultar
                 } else {
-                    if (videoStream) startScanLoop();
+                    if (videoStream) startScanLoop(); // Retoma câmera se a aba voltar
                 }
             });
         }
@@ -547,62 +555,23 @@
             if (navigator.onLine) {
                 badge.className = "net-status net-online";
                 badge.innerText = "ONLINE";
-                processPendingSyncQueue();
+                processPendingSyncQueue(); // Tenta limpar fila ao voltar online
             } else {
                 badge.className = "net-status net-offline";
                 badge.innerText = "OFFLINE";
             }
         }
 
-        function loadSettings() {
-            document.getElementById('sheets-url').value = localStorage.getItem('exp_pro_sheets') || '';
-        }
-
-        function saveSettings() {
-            localStorage.setItem('exp_pro_sheets', document.getElementById('sheets-url').value.trim());
-            processPendingSyncQueue();
-        }
-
-        function loadSavedData() {
-            const rawData = localStorage.getItem(STORAGE_KEY);
-            if (rawData) {
-                const parsed = JSON.parse(rawData);
-                parsed.forEach(i => scannedCodes.set(i.code, { time: i.time, synced: i.synced }));
-            }
-            updateUI();
-        }
-
-        function saveData() {
-            const exportable = Array.from(scannedCodes.entries()).map(([c, v]) => ({ code: c, time: v.time, synced: v.synced }));
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(exportable));
-        }
-
-        function updateUI() {
-            let pendingCount = 0;
-            scannedCodes.forEach(v => { if (!v.synced) pendingCount++; });
-
-            document.getElementById('count-total').innerText = scannedCodes.size;
-            document.getElementById('count-pending').innerText = pendingCount;
-
-            const listEl = document.getElementById('scanned-list');
-            listEl.innerHTML = '';
-
-            Array.from(scannedCodes.entries()).reverse().forEach(([code, item]) => {
-                const badgeClass = item.synced ? 'sync-ok' : 'sync-pending';
-                const badgeText = item.synced ? 'OK' : 'PENDENTE';
-                listEl.innerHTML += `
-                    <li class="scanned-item">
-                        <div>
-                            <span class="scanned-code">${code}</span>
-                            <span style="font-size:0.65rem; color:#64748b; margin-left:6px;">${item.time}</span>
-                        </div>
-                        <span class="sync-badge ${badgeClass}">${badgeText}</span>
-                    </li>`;
-            });
+        // 9. UI FEEDBACK E LIMPEZA
+        function showOverlay(code) {
+            const overlay = document.getElementById('feedback-overlay');
+            document.getElementById('feedback-code').innerText = code;
+            overlay.style.display = 'flex';
+            setTimeout(() => overlay.style.display = 'none', 1300);
         }
 
         function clearData() {
-            if (confirm("Deseja apagar o lote conferido hoje no dispositivo?")) {
+            if (confirm("Deseja apagar o lote conferido HOJE no dispositivo? (Dados já enviados ao Sheets estão seguros)")) {
                 scannedCodes.clear();
                 localStorage.removeItem(STORAGE_KEY);
                 updateUI();
