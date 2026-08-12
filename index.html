@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Expedição OCR Universal - V9 Confiança Dupla</title>
+    <title>Expedição OCR Universal - V10 (Fix Shopee)</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -146,7 +146,6 @@
                 if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
             }, { once: true });
 
-            // AUMENTADO DE 450ms PARA 800ms (Mais tempo para posicionar a câmera)
             setInterval(captureAndRecognize, 800);
         };
 
@@ -242,14 +241,14 @@
             if (isTooDark(imgData)) {
                 statusText.innerText = "Ambiente muito escuro...";
                 statusText.className = "status-bar status-warning";
-                pendingCount = 0; // Reseta a confiança se escurecer
+                pendingCount = 0; 
                 return;
             }
 
             if (isBlurry(imgData)) {
                 statusText.innerText = "Focando imagem...";
                 statusText.className = "status-bar status-warning";
-                pendingCount = 0; // Reseta a confiança se borrar
+                pendingCount = 0; 
                 return;
             }
 
@@ -260,13 +259,12 @@
             try {
                 const { data: { text } } = await ocrWorker.recognize(procCanvas);
                 if (text) evaluateText(text);
-                else pendingCount = 0; // Reseta se não ler nada
+                else pendingCount = 0; 
             } catch (e) {
                 console.error(e);
             } finally {
                 if (document.getElementById('feedback-overlay').style.display !== 'flex') {
                     isProcessing = false;
-                    // Só volta pro texto padrão se não estiver checando a confiança
                     if(pendingCount === 0) {
                         statusText.innerText = "Pronto! Centralize o código no laser.";
                     }
@@ -310,44 +308,57 @@
         }
 
         function evaluateText(rawText) {
-            const flatText = rawText.replace(/[^A-Z0-9]/g, '');
+            // Remove a palavra PEDIDO se o OCR ler junto, para não colar no código
+            const cleanRawText = rawText.toUpperCase().replace(/PEDIDO/g, '');
+            
+            const flatText = cleanRawText.replace(/[^A-Z0-9]/g, '');
             let code = null;
             let type = "";
 
+            // 1. CORREIOS
             const matchCorreios = flatText.match(/([A-Z]{2})(\d{9})/);
-            
             if (matchCorreios) {
                 let prefix = matchCorreios[1];
                 let middle = normalizeNum(matchCorreios[2]);
                 code = prefix + middle + "BR"; 
                 type = "CORREIOS";
             }
+            // 2. MERCADO LIVRE
             else if (/(20000\d{11}|\d{16})/.test(flatText)) {
                 const matchML = flatText.match(/(20000\d{11}|\d{16})/);
                 code = matchML[0];
                 type = "MERCADO LIVRE";
             }
+            // 3. TIKTOK, SHOPEE E OUTROS
             else {
-                const tokens = rawText.split(/[\s\n\r]+/).map(t => t.replace(/[^A-Z0-9]/g, '')).filter(t => t.length >= 8);
+                const tokens = cleanRawText.split(/[\s\n\r]+/).map(t => t.replace(/[^A-Z0-9]/g, '')).filter(t => t.length >= 8);
                 
                 for (const token of tokens) {
                     const numOnly = normalizeNum(token);
+                    const digitCount = (token.match(/\d/g) || []).length;
 
+                    // TIKTOK (Exatos 9 Números)
                     if (/^\d{9}$/.test(numOnly) && token.length === 9) {
                         code = numOnly;
                         type = "TIKTOK";
                         break;
                     }
                     
-                    const digitCount = (token.match(/\d/g) || []).length;
+                    // SHOPEE (Regra Exclusiva: Exatos 14 caracteres com letras e números)
+                    if (token.length === 14 && digitCount >= 4) {
+                        code = token;
+                        type = "SHOPEE";
+                        break;
+                    }
                     
+                    // OUTROS (Filtro Rigoroso Antialucinação)
                     if (token.length >= 10 && token.length <= 18 && digitCount >= 4) {
                         const isAllNumbers = /^\d+$/.test(numOnly); 
                         const startsWithTwoLetters = /^[A-Z]{2,}/.test(token); 
 
                         if (isAllNumbers || startsWithTwoLetters) {
                             code = token;
-                            type = "SHOPEE / OUTROS";
+                            type = "OUTROS";
                             break;
                         }
                     }
@@ -355,36 +366,31 @@
             }
 
             if (code) {
-                // Impede leitura dupla repetida do mesmo código já salvo recentemente
                 if (code === lastScannedCode && (Date.now() - lastScanTime) < 4000) {
                     pendingCount = 0;
                     return; 
                 }
                 
-                // --- TRAVA DE CONFIANÇA APLICADA AQUI ---
+                // MOTOR DE CONFIANÇA
                 if (code === pendingCode) {
-                    pendingCount++; // Leu o mesmo código pela segunda vez seguida
+                    pendingCount++; 
                 } else {
-                    pendingCode = code; // É a primeira vez que lê esse código
+                    pendingCode = code; 
                     pendingCount = 1;
                 }
 
                 if (pendingCount >= 2) {
-                    // Confiança atingida! Aprova o código.
                     lastScannedCode = code;
                     lastScanTime = Date.now();
                     handleCodeScanned(code, type);
                     
-                    // Reseta o motor de confiança para a próxima leitura
                     pendingCode = "";
                     pendingCount = 0;
                 } else {
-                    // Avisa que achou algo e está validando no próximo frame
                     statusText.innerText = "Confirmando leitura...";
                     statusText.className = "status-bar status-warning";
                 }
             } else {
-                // Se leu lixo (não bateu com as regex), reseta a confiança
                 pendingCode = "";
                 pendingCount = 0;
             }
