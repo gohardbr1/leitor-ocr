@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Expedição OCR Pro Extended</title>
-    <!-- Tesseract.js v5 -->
+    <title>Expedição OCR Pro Anti-Fantasma</title>
+    <!-- Tesseract.js v5 - Motor OCR Neural -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #0b0f19; color: #f8fafc; padding: 12px; display: flex; flex-direction: column; min-height: 100vh; }
         
         header { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1e293b; margin-bottom: 12px; }
-        h1 { font-size: 1rem; color: #38bdf8; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; }
+        h1 { font-size: 1rem; color: #38bdf8; text-transform: uppercase; font-weight: 800; }
         .net-status { font-size: 0.7rem; padding: 4px 8px; border-radius: 12px; font-weight: bold; }
         .net-online { background: #166534; color: #4ade80; }
         .net-offline { background: #991b1b; color: #fca5a5; }
@@ -46,9 +46,13 @@
         .sync-ok { background: #166534; color: #4ade80; }
         .sync-pending { background: #854d0e; color: #fef08a; }
 
-        #feedback-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; background-color: rgba(22, 101, 52, 0.95); }
-        .feedback-title { font-size: 2rem; font-weight: 900; color: #fff; margin-bottom: 8px; }
-        .feedback-code { font-size: 1.2rem; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 8px; color: #f8fafc; font-family: monospace; }
+        /* MODAIS DE FEEDBACK (Sucesso vs Duplicidade) */
+        #feedback-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; }
+        .overlay-success { background-color: rgba(22, 101, 52, 0.95); }
+        .overlay-duplicate { background-color: rgba(185, 28, 28, 0.95); }
+        
+        .feedback-title { font-size: 1.8rem; font-weight: 900; color: #fff; margin-bottom: 8px; }
+        .feedback-code { font-size: 1.2rem; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 8px; color: #f8fafc; font-family: monospace; }
         
         canvas { display: none; }
     </style>
@@ -104,24 +108,31 @@
     </div>
 
     <div id="feedback-overlay">
-        <div class="feedback-title">✓ LIDO COM SUCESSO</div>
+        <div class="feedback-title" id="feedback-title">✓ LIDO COM SUCESSO</div>
         <div class="feedback-code" id="feedback-code">---</div>
     </div>
 
     <canvas id="proc-canvas"></canvas>
 
     <script>
+        // === VARIÁVEIS DE ESTADO E PERSISTÊNCIA ===
         let scannedCodes = new Map(); // Code -> { time, synced }
         let isProcessing = false;
         let isOcrReady = false;
         let currentFacingMode = 'environment';
         let torchActive = false;
         
+        // Mecanismo Debounce
+        let lastScannedCode = null;
+        let lastScanTime = 0;
+
+        // Motores
         let ocrWorker = null;
         let videoStream = null;
         let audioCtx = null;
         let scanInterval = null;
 
+        // Elementos DOM
         const video = document.getElementById('video');
         const targetBox = document.getElementById('target-box');
         const procCanvas = document.getElementById('proc-canvas');
@@ -141,7 +152,7 @@
             setInterval(processPendingSyncQueue, 5000); // Tenta sincronizar a fila a cada 5 segundos
         };
 
-        // 1. INICIALIZAÇÃO E OTIMIZAÇÃO DO TESSERACT
+        // 1. INICIALIZAÇÃO DO TESSERACT
         async function initOcrEngine() {
             try {
                 ocrStatusText.innerText = "Carregando rede neural OCR...";
@@ -149,7 +160,7 @@
                 ocrWorker = await Tesseract.createWorker('eng');
                 await ocrWorker.setParameters({
                     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // Otimizado para blocos de texto impresso
+                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
                 });
 
                 isOcrReady = true;
@@ -164,7 +175,7 @@
             }
         }
 
-        // 2. GERENCIAMENTO AVANÇADO DE CÂMERA (Lanterna, Foco, Troca)
+        // 2. GERENCIAMENTO DE CÂMERA
         async function startCamera() {
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
@@ -182,10 +193,7 @@
 
                 videoStream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = videoStream;
-                
-                video.onloadedmetadata = () => {
-                    startScanLoop();
-                };
+                video.onloadedmetadata = () => startScanLoop();
             } catch (err) {
                 alert("Erro ao acessar câmera: " + err.message);
             }
@@ -229,7 +237,7 @@
             }
         }
 
-        // 3. CAPTURA E PRÉ-PROCESSAMENTO ADAPTATIVO
+        // 3. CAPTURA COM FILTRO ANTI-FANTASMA (CORREÇÃO DE FANTASMAS)
         async function captureAndRecognize() {
             if (!isOcrReady || isProcessing || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
@@ -237,7 +245,7 @@
             const videoRect = video.getBoundingClientRect();
             if (videoRect.width === 0 || videoRect.height === 0) return;
 
-            // Compensação Geométrica Exata (object-fit: cover)
+            // Compensação Geométrica object-fit: cover
             const intrinsicW = video.videoWidth;
             const intrinsicH = video.videoHeight;
             const elemW = videoRect.width;
@@ -266,15 +274,20 @@
 
             if (cropW <= 0 || cropH <= 0) return;
 
-            // Renderiza no canvas com ampliação de 2x
             const scaleFactor = 2;
             procCanvas.width = cropW * scaleFactor;
             procCanvas.height = cropH * scaleFactor;
 
             procCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, procCanvas.width, procCanvas.height);
 
-            // Binarização e Aumento do Histograma Local (Resistente à sombra)
-            applyAdaptiveThreshold(procCtx, procCanvas.width, procCanvas.height);
+            // === FILTRO ANTI-FANTASMA: Avalia luminância e variância antes do OCR ===
+            const imgData = procCtx.getImageData(0, 0, procCanvas.width, procCanvas.height);
+            if (isImageTooDarkOrUniform(imgData)) {
+                return; // ABORTA O CICLO SE A IMAGEM ESTIVER TAMPADA OU SEM TEXTO
+            }
+
+            // Binarização Adaptativa (Alto Contraste)
+            applyAdaptiveThresholding(procCtx, imgData);
 
             isProcessing = true;
 
@@ -284,25 +297,50 @@
                     evaluateTextTokens(text);
                 }
             } catch (e) {
-                console.error("Erro no processamento OCR:", e);
+                console.error("Erro OCR:", e);
             } finally {
                 isProcessing = false;
             }
         }
 
-        // Binarização Dinâmica de Alto Contraste
-        function applyAdaptiveThreshold(ctx, width, height) {
-            const imgData = ctx.getImageData(0, 0, width, height);
+        // VALIDADOR ANTI-FANTASMA: Impede leitura se a câmera tiver tampada
+        function isImageTooDarkOrUniform(imgData) {
             const pixels = imgData.data;
-            const numPixels = pixels.length / 4;
-
+            const len = pixels.length;
+            const numPixels = len / 4;
             let totalLuma = 0;
-            for (let i = 0; i < pixels.length; i += 4) {
-                const luma = 0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2];
-                totalLuma += luma;
+
+            for (let i = 0; i < len; i += 4) {
+                totalLuma += (0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2]);
             }
             const avgLuma = totalLuma / numPixels;
-            const threshold = avgLuma * 0.88; // Limiar ajustado para impressão térmica
+
+            // Se for muito escuro (câmera tampada < 35) ou extremamente brilhante estourado (> 245)
+            if (avgLuma < 35 || avgLuma > 245) return true;
+
+            // Teste de variância/contraste (Câmera tampada tem pouca variância entre pixels)
+            let varianceSum = 0;
+            const step = 40; // amostragem rápida
+            for (let i = 0; i < len; i += step) {
+                const luma = (0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2]);
+                varianceSum += Math.abs(luma - avgLuma);
+            }
+            const avgVariance = varianceSum / (numPixels / (step / 4));
+
+            // Se o contraste for muito baixo (< 14), é apenas uma superfície lisa (não há texto real impresso)
+            if (avgVariance < 14) return true;
+
+            return false;
+        }
+
+        function applyAdaptiveThresholding(ctx, imgData) {
+            const pixels = imgData.data;
+            let totalLuma = 0;
+            for (let i = 0; i < pixels.length; i += 4) {
+                totalLuma += (0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2]);
+            }
+            const avgLuma = totalLuma / (pixels.length / 4);
+            const threshold = avgLuma * 0.85; // Limiar dinâmico
 
             for (let i = 0; i < pixels.length; i += 4) {
                 const luma = 0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2];
@@ -312,22 +350,20 @@
             ctx.putImageData(imgData, 0, 0);
         }
 
-        // 4. NORMALIZAÇÃO SEMÂNTICA E VALIDAÇÃO DE PADRÕES
+        // 4. AVALIAÇÃO DE TOKENS E NORMALIZAÇÃO
         function evaluateTextTokens(rawText) {
-            // Separa blocos de palavras por espaços/quebras de linha
             const rawTokens = rawText.split(/[\s\n\r]+/).map(t => t.replace(/[^A-Z0-9]/g, '')).filter(t => t.length >= 8);
 
             for (const token of rawTokens) {
                 let matchedCode = null;
 
-                // --- TESTE 1: MERCADO LIVRE (16 Dígitos numéricos iniciando em 20000) ---
-                // Aplica correção de substituição de O/I/S/B por números
+                // Mercado Livre (16 Dígitos - Ex: 20000...)
                 const mlNormalized = normalizeToNumeric(token);
                 if (/^20000\d{11}$/.test(mlNormalized)) {
                     matchedCode = mlNormalized;
                 }
 
-                // --- TESTE 2: CORREIOS (2 Letras + 9 Dígitos + BR) ---
+                // Correios (2 Letras + 9 Dígitos + BR)
                 if (!matchedCode && token.length === 13) {
                     const prefix = token.substring(0, 2).replace(/[0-9]/g, 'A');
                     const middle = normalizeToNumeric(token.substring(2, 11));
@@ -337,14 +373,12 @@
                     }
                 }
 
-                // --- TESTE 3: SHOPEE (15 Caracteres Alfanuméricos) ---
-                if (!matchedCode && token.length === 15) {
-                    if (/^[A-Z0-9]{15}$/.test(token)) {
-                        matchedCode = token;
-                    }
+                // Shopee (Apenas 15 alfanuméricos)
+                if (!matchedCode && token.length === 15 && /^[A-Z0-9]{15}$/.test(token)) {
+                    matchedCode = token;
                 }
 
-                // --- TESTE 4: TIKTOK (9 Dígitos numéricos) ---
+                // TikTok (Exatamente 9 dígitos numéricos)
                 if (!matchedCode && token.length === 9) {
                     const tiktokNormalized = normalizeToNumeric(token);
                     if (/^\d{9}$/.test(tiktokNormalized)) {
@@ -370,42 +404,94 @@
                 .replace(/Z/g, '2');
         }
 
-        // 5. PROCESSAMENTO, FEEDBACK E PERSISTÊNCIA
+        // 5. GERENCIAMENTO DE DUPLICIDADE E FEEDBACKS ATIVOS (MUDANÇAS AQUI)
         function processScannedCode(cleanCode) {
+            const now = Date.now();
+            
+            // Trava Debounce: Evita processar o mesmo código repetidamente dentro de 2.5 segundos
+            if (cleanCode === lastScannedCode && (now - lastScanTime) < 2500) {
+                return;
+            }
+
+            lastScannedCode = cleanCode;
+            lastScanTime = now;
+
             const timeNow = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-            if (!scannedCodes.has(cleanCode)) {
+            // === VERIFICAÇÃO DE DUPLICIDADE REAL (CORREÇÃO DE DUPLICIDADE) ===
+            if (scannedCodes.has(cleanCode)) {
+                // FEEDBACK ATIVO DE ERRO
+                playDuplicateFeedback();
+                showOverlay(cleanCode, false); // TELA VERMELHA DE ALERTA
+            } else {
+                // CÓDIGO NOVO: SALVA E SINCRONIZA
                 scannedCodes.set(cleanCode, { time: timeNow, synced: false });
                 saveData();
                 updateUI();
-                playFeedback();
-                showOverlay(cleanCode);
-                processPendingSyncQueue(); // Tenta enviar imediatamente
+                playSuccessFeedback();
+                showOverlay(cleanCode, true); // TELA VERDE DE SUCESSO
+                processPendingSyncQueue();
             }
         }
 
-        function playFeedback() {
-            // Sonoro (Beep)
+        // FEEDBACKS SONOROS
+        function playSuccessFeedback() {
             try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (audioCtx.state === 'suspended') audioCtx.resume();
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.frequency.setValueAtTime(1750, audioCtx.currentTime);
-                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.1);
             } catch (e) {}
 
-            // Vibratório (Haptic)
-            if (navigator.vibrate) {
-                navigator.vibrate([80, 40, 80]);
-            }
+            if (navigator.vibrate) navigator.vibrate(80);
         }
 
-        // 6. GERENCIAMENTO DE FILA OFFLINE E SINCRONIZAÇÃO (Google Sheets)
+        function playDuplicateFeedback() {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                
+                // Dois tons graves em sequência (Tom de Erro)
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.35);
+            } catch (e) {}
+
+            if (navigator.vibrate) navigator.vibrate([150, 100, 150]);
+        }
+
+        // FEEDBACK VISUAL (OVERLAY VERDE OU VERMELHO)
+        function showOverlay(code, isSuccess) {
+            const overlay = document.getElementById('feedback-overlay');
+            const titleEl = document.getElementById('feedback-title');
+            document.getElementById('feedback-code').innerText = code;
+
+            if (isSuccess) {
+                overlay.className = 'overlay-success';
+                titleEl.innerText = '✓ LIDO COM SUCESSO';
+            } else {
+                overlay.className = 'overlay-duplicate';
+                titleEl.innerText = '⚠️ CÓDIGO JÁ CONFERIDO!';
+            }
+
+            overlay.style.display = 'flex';
+            setTimeout(() => overlay.style.display = 'none', 1300);
+        }
+
+        // 6. GERENCIAMENTO DE SINCRONIZAÇÃO E LOCALSTORAGE (App 1)
         async function processPendingSyncQueue() {
             const url = document.getElementById('sheets-url').value.trim();
             if (!url || !navigator.onLine) return;
@@ -429,11 +515,11 @@
                         body: JSON.stringify({ codigo: code, horario: item.time, data: todayStr })
                     });
                     
-                    // Com no-cors, se não estourar erro, consideramos enviado com sucesso
+                    // Com no-cors, se não der erro, consideramos enviado com sucesso
                     scannedCodes.set(code, { ...item, synced: true });
                 } catch (err) {
-                    console.error("Falha de envio para código " + code, err);
-                    break; // Interrompe para tentar no próximo ciclo de sync
+                    console.error("Erro sync código " + code, err);
+                    break; // Interrompe e tenta no próximo ciclo
                 }
             }
 
@@ -441,9 +527,7 @@
             updateUI();
         }
 
-        // 7. EVENT LISTENERS DE REDE E ENERGIA
         function setupNetworkAndVisibilityListeners() {
-            // Monitoramento de Rede
             window.addEventListener('online', updateNetworkStatus);
             window.addEventListener('offline', updateNetworkStatus);
             updateNetworkStatus();
@@ -470,7 +554,6 @@
             }
         }
 
-        // 8. GERENCIAMENTO DE ARMAZENAMENTO LOCAL (LocalStorage)
         function loadSettings() {
             document.getElementById('sheets-url').value = localStorage.getItem('exp_pro_sheets') || '';
         }
@@ -516,13 +599,6 @@
                         <span class="sync-badge ${badgeClass}">${badgeText}</span>
                     </li>`;
             });
-        }
-
-        function showOverlay(code) {
-            const overlay = document.getElementById('feedback-overlay');
-            document.getElementById('feedback-code').innerText = code;
-            overlay.style.display = 'flex';
-            setTimeout(() => overlay.style.display = 'none', 1200);
         }
 
         function clearData() {
