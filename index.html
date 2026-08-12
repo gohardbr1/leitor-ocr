@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Expedição OCR Universal - V7 Blindagem Total (Com Linha de Corte)</title>
+    <title>Expedição OCR Universal - V7 Blindagem Total + Anti-Desfoque</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -15,16 +15,34 @@
         .camera-wrapper { position: relative; width: 100%; height: 260px; background: #000; border-radius: 10px; overflow: hidden; border: 2px solid #38bdf8; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; }
         #video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
         
-        /* MIRA ATUALIZADA COM ÁREA IGNORADA */
-        .target-box { position: absolute; width: 85%; height: 95px; border: 3px solid #facc15; border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65); pointer-events: none; z-index: 10; }
-        .target-box::after { content: "ENQUADRE O TEXTO ABAIXO DA LINHA"; position: absolute; bottom: -22px; width: 100%; text-align: center; color: #facc15; font-size: 0.65rem; font-weight: bold; }
-        
-        .ignore-area { position: absolute; top: 0; left: 0; width: 100%; height: 40%; background: rgba(239, 68, 68, 0.2); border-bottom: 2px solid #ef4444; display: flex; align-items: flex-start; justify-content: center; padding-top: 4px; }
-        .ignore-text { color: #ef4444; font-size: 0.55rem; font-weight: 900; letter-spacing: 1px; text-shadow: 0px 0px 3px rgba(0,0,0,1); }
+        /* MIRA ATUALIZADA - LINHA SUPERIOR É O LASER */
+        .target-box { 
+            position: absolute; 
+            width: 85%; 
+            height: 70px; 
+            border: 2px solid rgba(56, 189, 248, 0.4); /* Bordas suaves */
+            border-top: 3px solid #ef4444; /* Laser Vermelho Forte */
+            border-radius: 4px; 
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65); 
+            pointer-events: none; 
+            z-index: 10; 
+        }
+        .target-box::before { 
+            content: "▼ POSICIONE O CÓDIGO AQUI ▼"; 
+            position: absolute; 
+            top: -22px; 
+            width: 100%; 
+            text-align: center; 
+            color: #ef4444; 
+            font-size: 0.65rem; 
+            font-weight: 900; 
+            letter-spacing: 1px;
+        }
 
         .cam-btn { position: absolute; top: 10px; right: 10px; z-index: 20; background: rgba(15,23,42,0.8); border: 1px solid #38bdf8; color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
 
-        .status-bar { font-size: 0.75rem; text-align: center; color: #4ade80; font-weight: 600; min-height: 20px; margin-bottom: 8px; }
+        .status-bar { font-size: 0.75rem; text-align: center; color: #4ade80; font-weight: 600; min-height: 20px; margin-bottom: 8px; transition: color 0.2s; }
+        .status-warning { color: #facc15; } /* Cor amarela para desfocado */
 
         .panel { background: #172033; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; flex-grow: 1; display: flex; flex-direction: column; }
         .panel-header { font-size: 0.75rem; font-weight: 700; color: #94a3b8; display: flex; justify-content: space-between; margin-bottom: 8px; }
@@ -54,11 +72,7 @@
 
     <div class="camera-wrapper">
         <video id="video" playsinline autoplay></video>
-        <div class="target-box">
-            <div class="ignore-area">
-                <span class="ignore-text">🚫 ÁREA IGNORADA</span>
-            </div>
-        </div>
+        <div class="target-box"></div>
         <button class="cam-btn" onclick="toggleCamera()">🔄 Câmera</button>
     </div>
 
@@ -143,7 +157,7 @@
             if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: currentFacingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+                    video: { facingMode: currentFacingMode, width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: "continuous" }
                 });
                 video.srcObject = stream;
             } catch (e) {
@@ -162,7 +176,7 @@
             const box = document.querySelector('.target-box').getBoundingClientRect();
             const vRect = video.getBoundingClientRect();
 
-            // 1. Descobrir as proporções reais da câmera vs elemento na tela
+            // Matemática original perfeita e reta - Apenas a área do Box
             const videoRatio = video.videoWidth / video.videoHeight;
             const elementRatio = vRect.width / vRect.height;
 
@@ -180,18 +194,13 @@
                 offsetX = (scaledWidth - vRect.width) / 2;
             }
 
-            // --- NOVA LÓGICA DE CORTE: IGNORANDO A ÁREA SUPERIOR ---
-            const PERCENTUAL_CORTE = 0.40; // 40% do topo da mira é ignorado (bate com o CSS)
-            const offsetLinhaY = box.height * PERCENTUAL_CORTE; 
-            const alturaLeituraReal = box.height - offsetLinhaY; // Apenas os 60% de baixo serão lidos
-
             const relX = box.left - vRect.left;
-            const relY = (box.top + offsetLinhaY) - vRect.top; // Começamos a ler a partir da linha vermelha!
+            const relY = box.top - vRect.top;
 
             const cropX = (relX + offsetX) / scale;
             const cropY = (relY + offsetY) / scale;
             const cropW = box.width / scale;
-            const cropH = alturaLeituraReal / scale;
+            const cropH = box.height / scale;
 
             if (cropW <= 0 || cropH <= 0) return;
 
@@ -200,7 +209,23 @@
             procCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
             const imgData = procCtx.getImageData(0, 0, cropW, cropH);
-            if (isTooDark(imgData)) return;
+            
+            // 1. Bloqueia se estiver escuro
+            if (isTooDark(imgData)) {
+                statusText.innerText = "Ambiente muito escuro...";
+                statusText.className = "status-bar status-warning";
+                return;
+            }
+
+            // 2. Bloqueia se estiver desfocado (Novo!)
+            if (isBlurry(imgData)) {
+                statusText.innerText = "Focando imagem...";
+                statusText.className = "status-bar status-warning";
+                return;
+            }
+
+            statusText.innerText = "Analisando...";
+            statusText.className = "status-bar";
 
             isProcessing = true;
             try {
@@ -211,6 +236,7 @@
             } finally {
                 if (document.getElementById('feedback-overlay').style.display !== 'flex') {
                     isProcessing = false;
+                    statusText.innerText = "Pronto! Aproxime o texto da mira.";
                 }
             }
         }
@@ -222,6 +248,37 @@
                 total += (0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2]);
             }
             return (total / (pixels.length / 16)) < 35;
+        }
+
+        // MOTOR ANTI-DESFOQUE: Verifica contraste e bordas fortes
+        function isBlurry(imgData) {
+            const pixels = imgData.data;
+            const width = imgData.width;
+            const height = imgData.height;
+            let diffSum = 0;
+            let count = 0;
+
+            // Pula pixels para garantir performance e não travar o celular
+            for (let y = 0; y < height - 2; y += 2) {
+                for (let x = 0; x < width - 2; x += 2) {
+                    const i = (y * width + x) * 4;
+                    const right = (y * width + (x + 2)) * 4;
+                    const bottom = ((y + 2) * width + x) * 4;
+
+                    // Converte para escala de luminosidade (Luma)
+                    const luma = 0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2];
+                    const lumaRight = 0.299 * pixels[right] + 0.587 * pixels[right+1] + 0.114 * pixels[right+2];
+                    const lumaBottom = 0.299 * pixels[bottom] + 0.587 * pixels[bottom+1] + 0.114 * pixels[bottom+2];
+
+                    // Calcula a diferença entre o pixel atual e os adjacentes
+                    diffSum += Math.abs(luma - lumaRight) + Math.abs(luma - lumaBottom);
+                    count += 2;
+                }
+            }
+            
+            // Score de nitidez (quanto maior, mais focado). Abaixo de 8 costuma ser lixo/borrado.
+            const score = diffSum / count;
+            return score < 8; 
         }
 
         // MOTOR V7 - IMUNE À ALUCINAÇÕES E CORTES
