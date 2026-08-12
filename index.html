@@ -3,367 +3,311 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Expedição OCR - Versão Blindada (V4)</title>
-    <!-- Tesseract.js via CDN (IA Nativa no Navegador) -->
+    <title>Expedição OCR Universal - DEFINITIVO</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: #0f172a; color: #f8fafc; display: flex; flex-direction: column; min-height: 100vh; overflow: hidden; }
+        body { background-color: #0b0f19; color: #f8fafc; display: flex; flex-direction: column; min-height: 100vh; padding: 10px; }
         
-        header { text-align: center; padding: 10px; background: #1e293b; border-bottom: 1px solid #334155; }
-        h1 { font-size: 1.1rem; color: #38bdf8; }
-        .subtitle { font-size: 0.75rem; color: #94a3b8; }
-
-        #btn-toggle-camera { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5); border: 1px solid #38bdf8; color: white; padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; z-index: 60; cursor: pointer; }
-
-        .camera-wrapper { position: relative; flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #000; overflow: hidden; }
+        header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid #1e293b; margin-bottom: 8px; }
+        h1 { font-size: 1rem; color: #38bdf8; font-weight: 800; text-transform: uppercase; }
+        
+        .camera-wrapper { position: relative; width: 100%; height: 260px; background: #000; border-radius: 10px; overflow: hidden; border: 2px solid #38bdf8; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; }
         #video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
-
-        /* Máscara de foco precisa para 9 dígitos */
-        .focus-mask { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; pointer-events: none; }
-        .target-box { width: 85%; height: 75px; border: 3px solid #facc15; border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7); background: transparent; position: relative; }
-        .target-box::after { content: "ALINHE OS 9 DÍGITOS TIKTOK AQUI"; position: absolute; bottom: -20px; width: 100%; text-align: center; color: #facc15; font-size: 0.7rem; font-weight: bold; }
-
-        /* Painel de Resultados */
-        .result-panel { background: #1e293b; padding: 15px; border-top: 1px solid #334155; max-height: 45vh; display: flex; flex-direction: column; }
-        .result-header { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; margin-bottom: 5px; text-align: center; }
-        .scanned-list { list-style: none; overflow-y: auto; flex-grow: 1; }
-        .scanned-item { background: #0f172a; border: 1px solid #334155; padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; font-size: 0.9rem; align-items: center; }
-        .scanned-code { font-family: monospace; font-weight: bold; color: #4ade80; font-size: 1.1rem; letter-spacing: 1px; }
-        .scanned-time { font-size: 0.75rem; color: #64748b; }
-
-        #debug-text { font-size: 0.7rem; color: #94a3b8; margin-top: 5px; text-align: center; min-height: 1rem; }
-
-        /* MODAL DE DUPLICIDADE (TELA VERMELHA AGRESSIVA) */
-        #duplicate-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(185, 28, 28, 0.95); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; padding: 20px; color: #fff; animation: pulse 0.3s infinite; }
-        .dup-title { font-size: 2.5rem; font-weight: 900; margin-bottom: 10px; text-transform: uppercase; }
-        .dup-code { font-size: 2rem; font-weight: bold; background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 8px; font-family: monospace; }
         
-        /* Oculta canvas de processamento */
-        canvas { display: none; }
+        .target-box { position: absolute; width: 85%; height: 70px; border: 3px solid #facc15; border-radius: 8px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65); pointer-events: none; z-index: 10; }
+        .target-box::after { content: "ENQUADRE O TEXTO DA ETIQUETA AQUI"; position: absolute; bottom: -20px; width: 100%; text-align: center; color: #facc15; font-size: 0.65rem; font-weight: bold; }
 
-        @keyframes pulse { 0% { opacity: 0.9; } 50% { opacity: 1; } 100% { opacity: 0.9; } }
+        .cam-btn { position: absolute; top: 10px; right: 10px; z-index: 20; background: rgba(15,23,42,0.8); border: 1px solid #38bdf8; color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
+
+        .status-bar { font-size: 0.75rem; text-align: center; color: #4ade80; font-weight: 600; min-height: 20px; margin-bottom: 8px; }
+
+        .panel { background: #172033; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; flex-grow: 1; display: flex; flex-direction: column; }
+        .panel-header { font-size: 0.75rem; font-weight: 700; color: #94a3b8; display: flex; justify-content: space-between; margin-bottom: 8px; }
+        
+        .scanned-list { list-style: none; overflow-y: auto; flex-grow: 1; max-height: 220px; }
+        .scanned-item { background: #0b0f19; border: 1px solid #1e293b; padding: 8px; border-radius: 4px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+        .code-text { font-family: monospace; font-size: 0.95rem; font-weight: 700; color: #38bdf8; }
+        .code-type { font-size: 0.65rem; background: #334155; padding: 2px 6px; border-radius: 4px; color: #f8fafc; font-weight: bold; }
+
+        /* OVERLAYS DE FEEDBACK CRÍTICO */
+        #feedback-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; padding: 20px; }
+        .bg-success { background: rgba(22, 101, 52, 0.96); }
+        .bg-duplicate { background: rgba(185, 28, 28, 0.98); animation: pulseRed 0.4s infinite; }
+        .fb-title { font-size: 2rem; font-weight: 900; color: #fff; margin-bottom: 10px; }
+        .fb-code { font-size: 1.4rem; font-family: monospace; background: rgba(0,0,0,0.6); padding: 10px 18px; border-radius: 8px; color: #fff; }
+
+        @keyframes pulseRed { 0% { opacity: 0.85; } 50% { opacity: 1; } 100% { opacity: 0.85; } }
+        canvas { display: none; }
     </style>
 </head>
 <body>
 
-    <button id="btn-toggle-camera" onclick="toggleCamera()">🔄 Girar</button>
-
     <header>
-        <h1>🧪 OCR Blindado V4</h1>
-        <div class="subtitle">Filtro de Ruído & Duplicidade Ativa</div>
+        <h1>📦 OCR Universal</h1>
+        <span id="counter" style="font-size: 0.8rem; font-weight: bold; color: #4ade80;">Lidos: 0</span>
     </header>
 
     <div class="camera-wrapper">
         <video id="video" playsinline autoplay></video>
-        <div class="focus-mask">
-            <div class="target-box" id="target-box"></div>
-        </div>
+        <div class="target-box"></div>
+        <button class="cam-btn" onclick="toggleCamera()">🔄 Câmera</button>
     </div>
 
-    <div class="result-panel">
-        <div class="result-header">Lidos Hoje (Maps Persistente)</div>
+    <div class="status-bar" id="status-text">Inicializando motor de inteligência...</div>
+
+    <div class="panel">
+        <div class="panel-header">
+            <span>HISTÓRICO DE BIPAGEM (HOJE)</span>
+            <button onclick="clearData()" style="background:none; border:none; color:#ef4444; font-size:0.7rem; cursor:pointer; font-weight:bold;">Limpar Lista</button>
+        </div>
         <ul class="scanned-list" id="scanned-list"></ul>
-        <div id="debug-text">Iniciando câmera...</div>
+    </div>
+
+    <div id="feedback-overlay">
+        <div class="fb-title" id="fb-title">✓ LIDO</div>
+        <div class="fb-code" id="fb-code">---</div>
     </div>
 
     <canvas id="proc-canvas"></canvas>
 
-    <div id="duplicate-overlay">
-        <div class="dup-title">⚠️ DUPLICADO!</div>
-        <div class="dup-title" style="font-size: 1.2rem; margin-top: -10px; font-weight: 400;">CÓDIGO JÁ CONFERIDO</div>
-        <div class="dup-code" id="feedback-dup-code">---</div>
-    </div>
-
     <script>
-        // Configurações Técnicas
-        const CONFIG = {
-            whitelisted_chars: '0123456789', // Whitelist rigorosa para números
-            regex_pattern: /^\d{9}$/,      // Exatamente 9 dígitos do TikTok
-            debounce_time_ms: 1800,        // Trava de leitura para o mesmo código
-            scan_interval_ms: 600,         // Intervalo de processamento de frame
-            brightness_threshold: 40        // Abaixo disso, ignora (Câmera tampada)
-        };
-
+        let scannedCodes = new Map();
+        let ocrWorker = null;
+        let isProcessing = false;
+        let audioCtx = null;
+        let currentFacingMode = 'environment';
+        
         const video = document.getElementById('video');
         const procCanvas = document.getElementById('proc-canvas');
         const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
+        const statusText = document.getElementById('status-text');
         const scannedList = document.getElementById('scanned-list');
-        const debugText = document.getElementById('debug-text');
-        const dupOverlay = document.getElementById('duplicate-overlay');
-        const dupCodeText = document.getElementById('feedback-dup-code');
         
-        let scannedCodes = new Map(); // Maps para conferência de duplicidade
-        let isProcessing = false;
-        let ocrWorker = null;
-        let scanInterval = null;
-        let audioCtx = null; // Áudio reutilizado para evitar memory leak
-        let currentFacingMode = "environment"; 
-
         const todayStr = new Date().toISOString().split('T')[0];
-        const STORAGE_KEY = 'conferencia_tiktok_' + todayStr;
+        const STORAGE_KEY = 'exp_ocr_universal_' + todayStr;
 
-        // Inicialização Global
         window.onload = async function() {
-            try {
-                loadSavedData();
-                await initOCR();
-                await startCamera();
-                // Inicializa contexto de áudio
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            } catch (err) {
-                console.error(err);
-                debugText.innerText = "Falha crítica na inicialização.";
-            }
+            loadSavedData();
+            await initOCR();
+            await startCamera();
+            
+            // Inicia o contexto de áudio
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Destrava o áudio no primeiro toque na tela (exigência de navegadores mobile)
+            document.body.addEventListener('click', () => {
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            }, { once: true });
+
+            setInterval(captureAndRecognize, 450);
         };
 
-        // Persistência de Dados (Maps em LocalStorage)
         function loadSavedData() {
-            try {
-                const rawData = localStorage.getItem(STORAGE_KEY);
-                if (rawData) {
-                    const arr = JSON.parse(rawData);
-                    arr.forEach(item => scannedCodes.set(item.code, item.time));
-                    updateUI();
-                }
-            } catch(e) { console.error(e); localStorage.removeItem(STORAGE_KEY); }
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+                JSON.parse(raw).forEach(i => scannedCodes.set(i.code, i.type));
+                updateUI();
+            }
         }
 
-        function saveData(code, time) {
-            scannedCodes.set(code, time);
-            const arr = Array.from(scannedCodes.entries()).map(([code, time]) => ({ code, time }));
+        function saveData() {
+            const arr = Array.from(scannedCodes.entries()).map(([code, type]) => ({ code, type }));
             localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
             updateUI();
         }
 
-        // Inicializa Câmera
-        async function startCamera() {
+        async function initOCR() {
             try {
-                if(video.srcObject) { video.srcObject.getTracks().forEach(track => track.stop()); }
-
-                const constraints = {
-                    video: {
-                        facingMode: currentFacingMode,
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
-                        focusMode: { ideal: "continuous" }
-                    }
-                };
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = stream;
-                
-                return new Promise((resolve) => {
-                    video.onloadedmetadata = () => {
-                        debugText.innerText = "Câmera ativa. Alinhe o código.";
-                        startScanLoop();
-                        resolve();
-                    };
+                statusText.innerText = "Carregando OCR...";
+                ocrWorker = await Tesseract.createWorker('eng');
+                await ocrWorker.setParameters({
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK
                 });
-            } catch (err) {
-                debugText.innerText = `Erro câmera: ${err.message}`;
-                throw err;
+                statusText.innerText = "Pronto! Aproxime o texto da mira.";
+            } catch (e) {
+                statusText.innerText = "Erro ao iniciar OCR: " + e.message;
+            }
+        }
+
+        async function startCamera() {
+            if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: currentFacingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
+                video.srcObject = stream;
+            } catch (e) {
+                alert("Erro ao abrir câmera. Verifique se o site está rodando em HTTPS: " + e.message);
             }
         }
 
         function toggleCamera() {
-            currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
-            startCamera().catch(e => debugText.innerText = `Falha troca câmera: ${e.message}`);
+            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+            startCamera();
         }
 
-        // Inicializa Inteligência de Leitura (OCR)
-        async function initOCR() {
-            debugText.innerText = "Inicializando IA de leitura (Pode levar segundos)...";
-            try {
-                ocrWorker = await Tesseract.createWorker({
-                    // Reduz mensagens de log para leveza
-                    logger: m => { if (m.status === 'initializing api') debugText.innerText = "Ajustando motor..." }
-                });
-                await ocrWorker.loadLanguage('por'); // Idioma para auxiliar contraste
-                await ocrWorker.initialize('por');
-                // Whitelist rigorosa: ignora qualquer coisa que não seja número
-                await ocrWorker.setParameters({
-                    tessedit_char_whitelist: CONFIG.whitelisted_chars,
-                    tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK, // Lê como bloco único
-                });
-                debugText.innerText = "OCR Pronto.";
-            } catch (err) {
-                debugText.innerText = `Erro IA: ${err.message}`;
-                throw err;
-            }
-        }
+        async function captureAndRecognize() {
+            if (!ocrWorker || isProcessing || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-        function startScanLoop() {
-            if (scanInterval) clearInterval(scanInterval);
-            scanInterval = setInterval(captureAndScan, CONFIG.scan_interval_ms);
-        }
+            const box = document.querySelector('.target-box').getBoundingClientRect();
+            const vRect = video.getBoundingClientRect();
+            const scaleX = video.videoWidth / vRect.width;
+            const scaleY = video.videoHeight / vRect.height;
 
-        // === CORE DO PROCESSAMENTO: Caputra, Filtro Anti-Fantasma, OCR e Validação ===
-        async function captureAndScan() {
-            if (isProcessing || !ocrWorker) return;
-            isProcessing = true;
+            const cropX = (box.left - vRect.left) * scaleX;
+            const cropY = (box.top - vRect.top) * scaleY;
+            const cropW = box.width * scaleX;
+            const cropH = box.height * scaleY;
 
-            const targetBox = document.getElementById('target-box');
-            const boxRect = targetBox.getBoundingClientRect();
-            const videoRect = video.getBoundingClientRect();
-
-            const scaleX = video.videoWidth / videoRect.width;
-            const scaleY = video.videoHeight / videoRect.height;
-
-            const cropX = (boxRect.left - videoRect.left) * scaleX;
-            const cropY = (boxRect.top - videoRect.top) * scaleY;
-            const cropW = boxRect.width * scaleX;
-            const cropH = boxRect.height * scaleY;
+            if (cropW <= 0 || cropH <= 0) return;
 
             procCanvas.width = cropW;
             procCanvas.height = cropH;
-
             procCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
             const imgData = procCtx.getImageData(0, 0, cropW, cropH);
-            
-            // === FILTRO ANTI-FANTASMA OPERACIONAL ===
-            if (isImageTooDark(imgData)) {
-                isProcessing = false;
-                // debugText.innerText = "Ruído detectado (Câmera obstruída)";
-                return; // ABORTA O OCR AQUI
-            }
 
-            // Pré-processamento agressivo para leitura térmica
-            applyContrastEnhancement(procCtx, imgData);
+            // FILTRO DE LUMINÂNCIA (Impede leitura com câmera tampada / no escuro)
+            if (isTooDark(imgData)) return;
 
+            isProcessing = true;
             try {
                 const { data: { text } } = await ocrWorker.recognize(procCanvas);
-                // Limpa o texto: remove espaços, quebras e sujeiras que sobraram
-                const cleanText = text.replace(/[^0-9]/g, '').trim();
-                
-                debugText.innerText = `Lido: "${cleanText}"`; // Feedback visual rápido
-                
-                checkCodePattern(cleanText);
-            } catch (err) {
-                console.error(err);
+                if (text) evaluateText(text);
+            } catch (e) {
+                console.error(e);
             } finally {
                 isProcessing = false;
             }
         }
 
-        // === GUARDA DE LUMINÂNCIA (FILTRO ANTI-FANTASMA) ===
-        // Abaixo do threshold definido, ignora o OCR para não ler ruído digital
-        function isImageTooDark(imgData) {
+        function isTooDark(imgData) {
+            let total = 0;
             const pixels = imgData.data;
-            let totalLuma = 0;
-            const numPixels = imgData.width * imgData.height;
-
-            for (let i = 0; i < pixels.length; i += 4) {
-                // Cálculo rápido de luminância (Luma BT.709)
-                const luma = 0.2126 * pixels[i] + 0.7152 * pixels[i+1] + 0.0722 * pixels[i+2];
-                totalLuma += luma;
+            for (let i = 0; i < pixels.length; i += 16) {
+                total += (0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2]);
             }
-            const avgLuma = totalLuma / numPixels;
-            // debugText.innerText = `Luminância: ${avgLuma.toFixed(1)}`; // Debug
-            return avgLuma < CONFIG.brightness_threshold; 
+            return (total / (pixels.length / 16)) < 35; // Se escuro, aborta
         }
 
-        // Binarização e Contraste Otimizado para Texto Numérico
-        function applyContrastEnhancement(ctx, imgData) {
-            const pixels = imgData.data;
-            for (let i = 0; i < pixels.length; i += 4) {
-                const luma = 0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2];
-                // Binarização Otsu-like simplificada para leitura térmica
-                const threshold = 110; 
-                const value = luma < threshold ? 0 : 255;
-                pixels[i] = value;
-                pixels[i + 1] = value;
-                pixels[i + 2] = value;
-            }
-            ctx.putImageData(imgData, 0, 0);
-        }
+        // MOTOR DE AVALIAÇÃO MULTIMERCADO DEFINITIVO
+        function evaluateText(rawText) {
+            // Quebra o texto e limpa lixo
+            const tokens = rawText.split(/[\s\n\r]+/).map(t => t.replace(/[^A-Z0-9]/g, '')).filter(t => t.length >= 8);
 
-        // Validação e Conferência de Duplicidade
-        let lastSuccessfulRead = null;
-        let lastReadTime = 0;
+            for (const token of tokens) {
+                let code = null;
+                let type = "";
 
-        function checkCodePattern(text) {
-            const now = Date.now();
+                const numOnly = normalizeNum(token);
 
-            // Regra 1: Atende ao padrão de 9 dígitos do TikTok?
-            if (CONFIG.regex_pattern.test(text)) {
-                
-                // Debounce Operacional: Evita bipar o mesmo código múltiplas vezes seguidas
-                if (text === lastSuccessfulRead && (now - lastReadTime) < CONFIG.debounce_time_ms) {
-                    return; 
+                // 1. Mercado Livre (16 dígitos)
+                if (/^20000\d{11}$/.test(numOnly) || /^\d{16}$/.test(numOnly)) {
+                    code = numOnly;
+                    type = "MERCADO LIVRE";
+                }
+                // 2. Correios (2 Letras + 9 Números + BR ou 8R)
+                else if (token.length === 13) {
+                    const prefix = token.substring(0, 2).replace(/[0-9]/g, 'A');
+                    const middle = normalizeNum(token.substring(2, 11));
+                    const suffix = token.substring(11, 13);
+                    if (/^[A-Z]{2}$/.test(prefix) && /^\d{9}$/.test(middle) && (suffix === "BR" || suffix === "8R")) {
+                        code = prefix + middle + "BR"; // Força terminar em BR se leu 8R
+                        type = "CORREIOS";
+                    }
+                }
+                // 3. TikTok (Exatos 9 Números)
+                else if (/^\d{9}$/.test(numOnly) && token.length === 9) {
+                    code = numOnly;
+                    type = "TIKTOK";
+                }
+                // 4. Shopee / Outros (Alfanumérico Genérico Válido)
+                else if (/^[A-Z0-9]{10,18}$/.test(token)) {
+                    code = token;
+                    type = "SHOPEE / OUTROS";
                 }
 
-                // === CONFERÊNCIA DE DUPLICIDADE (Usando o Maps) ===
-                if (scannedCodes.has(text)) {
-                    // == CÓDIGO JÁ CONFERIDO ==
-                    playBeepDuplicate(); // Som de erro grave
-                    showDuplicateOverlay(text); // Tela Vermelha
+                if (code) {
+                    handleCodeScanned(code, type);
+                    break; // Sai do loop para processar só 1 código por vez
+                }
+            }
+        }
+
+        function normalizeNum(str) {
+            return str.replace(/O/g, '0').replace(/I/g, '1').replace(/L/g, '1').replace(/S/g, '5').replace(/Z/g, '2');
+        }
+
+        function handleCodeScanned(code, type) {
+            if (scannedCodes.has(code)) {
+                // DUPLICIDADE DETECTADA - TELA VERMELHA E ALARME GRAVE
+                playAudio(false);
+                showOverlay(`⚠️ DUPLICADO (${type})`, code, false);
+            } else {
+                // NOVO CÓDIGO - TELA VERDE E BIPE DE SUCESSO
+                scannedCodes.set(code, type);
+                saveData();
+                playAudio(true);
+                showOverlay(`✓ LIDO (${type})`, code, true);
+            }
+        }
+
+        function showOverlay(title, code, isSuccess) {
+            const overlay = document.getElementById('feedback-overlay');
+            document.getElementById('fb-title').innerText = title;
+            document.getElementById('fb-code').innerText = code;
+
+            overlay.className = isSuccess ? 'bg-success' : 'bg-duplicate';
+            overlay.style.display = 'flex';
+
+            isProcessing = true; // Trava leituras enquanto o overlay aparece
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                isProcessing = false;
+            }, isSuccess ? 1000 : 2000); // 1 segundo pra sucesso, 2 segundos pra erro
+        }
+
+        function playAudio(isSuccess) {
+            if (!audioCtx) return;
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                if (isSuccess) {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(1500, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.12);
                 } else {
-                    // == CÓDIGO NOVO (CONFERIDO COM SUCESSO) ==
-                    lastSuccessfulRead = text;
-                    lastReadTime = now;
-                    
-                    const timeNow = new Date().toLocaleTimeString('pt-BR');
-                    saveData(text, timeNow); // Salva no LocalStorage e no Maps
-                    playBeepSuccess(); // Bip de sucesso
-                    
-                    // Efeito visual na tela (flash verde)
-                    document.body.style.backgroundColor = "#166534";
-                    setTimeout(() => { document.body.style.backgroundColor = "#0f172a"; }, 300);
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.5);
                 }
-            }
+            } catch (e) {}
         }
 
-        // UI e Feedbacks
         function updateUI() {
+            document.getElementById('counter').innerText = `Lidos: ${scannedCodes.size}`;
             scannedList.innerHTML = '';
-            // Converte Map para Array e inverte para mostrar o mais recente no topo
-            Array.from(scannedCodes.entries()).reverse().forEach(([code, time]) => {
-                const li = document.createElement('li');
-                li.className = 'scanned-item';
-                li.innerHTML = `<span class="scanned-code">${code}</span><span class="scanned-time">${time}</span>`;
-                scannedList.appendChild(li);
+            Array.from(scannedCodes.entries()).reverse().forEach(([code, type]) => {
+                scannedList.innerHTML += `<li class="scanned-item"><span class="code-text">${code}</span><span class="code-type">${type}</span></li>`;
             });
         }
 
-        function showDuplicateOverlay(code) {
-            dupCodeText.innerText = code;
-            dupOverlay.style.display = 'flex';
-            // Trava o processamento por 2.5 segundos para o operador ver o erro
-            isProcessing = true; 
-            setTimeout(() => {
-                dupOverlay.style.display = 'none';
-                isProcessing = false;
-            }, 2500);
-        }
-
-        // Gerador de Áudio Nativo (Sem arquivos .mp3)
-        function playBeepSuccess() {
-            if (!audioCtx) return;
-            try {
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(1200, audioCtx.currentTime); // Som agudo (OK)
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                osc.connect(gain); gain.connect(audioCtx.destination);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.15);
-            } catch(e) {}
-        }
-
-        function playBeepDuplicate() {
-            if (!audioCtx) return;
-            try {
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(150, audioCtx.currentTime); // Som grave (Erro)
-                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-                osc.connect(gain); gain.connect(audioCtx.destination);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.6);
-            } catch(e) {}
+        function clearData() {
+            if (confirm("Tem certeza? Isso vai limpar todos os códigos lidos HOJE neste celular.")) {
+                scannedCodes.clear();
+                localStorage.removeItem(STORAGE_KEY);
+                updateUI();
+            }
         }
     </script>
 </body>
