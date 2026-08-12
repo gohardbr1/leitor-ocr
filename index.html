@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Expedição OCR Universal - V8 Mira Sniper</title>
+    <title>Expedição OCR Universal - V9 Confiança Dupla</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -119,8 +119,13 @@
         let audioCtx = null;
         let currentFacingMode = 'environment';
         
+        // Variáveis de Controle
         let lastScannedCode = "";
         let lastScanTime = 0;
+        
+        // Motor de Confiança (Dupla Checagem)
+        let pendingCode = "";
+        let pendingCount = 0;
         
         const video = document.getElementById('video');
         const procCanvas = document.getElementById('proc-canvas');
@@ -141,7 +146,8 @@
                 if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
             }, { once: true });
 
-            setInterval(captureAndRecognize, 450);
+            // AUMENTADO DE 450ms PARA 800ms (Mais tempo para posicionar a câmera)
+            setInterval(captureAndRecognize, 800);
         };
 
         function loadSavedData() {
@@ -212,18 +218,18 @@
                 offsetX = (scaledWidth - vRect.width) / 2;
             }
 
-            // --- A MIRA SNIPER: Corta APENAS a faixa onde o laser passa ---
-            const ALTURA_CORTE_PERCENTUAL = 0.35; // Apenas 35% do meio da caixa será lido!
+            // --- A MIRA SNIPER ---
+            const ALTURA_CORTE_PERCENTUAL = 0.35; 
             const alturaRealLeitura = box.height * ALTURA_CORTE_PERCENTUAL;
-            const offsetCentral = (box.height - alturaRealLeitura) / 2; // Pula a parte de cima para focar só no meio
+            const offsetCentral = (box.height - alturaRealLeitura) / 2; 
 
             const relX = box.left - vRect.left;
-            const relY = (box.top + offsetCentral) - vRect.top; // Desloca a leitura pra linha do laser
+            const relY = (box.top + offsetCentral) - vRect.top; 
 
             const cropX = (relX + offsetX) / scale;
             const cropY = (relY + offsetY) / scale;
             const cropW = box.width / scale;
-            const cropH = alturaRealLeitura / scale; // Restringe a altura da leitura
+            const cropH = alturaRealLeitura / scale; 
 
             if (cropW <= 0 || cropH <= 0) return;
 
@@ -236,12 +242,14 @@
             if (isTooDark(imgData)) {
                 statusText.innerText = "Ambiente muito escuro...";
                 statusText.className = "status-bar status-warning";
+                pendingCount = 0; // Reseta a confiança se escurecer
                 return;
             }
 
             if (isBlurry(imgData)) {
                 statusText.innerText = "Focando imagem...";
                 statusText.className = "status-bar status-warning";
+                pendingCount = 0; // Reseta a confiança se borrar
                 return;
             }
 
@@ -252,12 +260,16 @@
             try {
                 const { data: { text } } = await ocrWorker.recognize(procCanvas);
                 if (text) evaluateText(text);
+                else pendingCount = 0; // Reseta se não ler nada
             } catch (e) {
                 console.error(e);
             } finally {
                 if (document.getElementById('feedback-overlay').style.display !== 'flex') {
                     isProcessing = false;
-                    statusText.innerText = "Pronto! Centralize o código no laser.";
+                    // Só volta pro texto padrão se não estiver checando a confiança
+                    if(pendingCount === 0) {
+                        statusText.innerText = "Pronto! Centralize o código no laser.";
+                    }
                 }
             }
         }
@@ -343,11 +355,38 @@
             }
 
             if (code) {
-                if (code === lastScannedCode && (Date.now() - lastScanTime) < 4000) return; 
+                // Impede leitura dupla repetida do mesmo código já salvo recentemente
+                if (code === lastScannedCode && (Date.now() - lastScanTime) < 4000) {
+                    pendingCount = 0;
+                    return; 
+                }
                 
-                lastScannedCode = code;
-                lastScanTime = Date.now();
-                handleCodeScanned(code, type);
+                // --- TRAVA DE CONFIANÇA APLICADA AQUI ---
+                if (code === pendingCode) {
+                    pendingCount++; // Leu o mesmo código pela segunda vez seguida
+                } else {
+                    pendingCode = code; // É a primeira vez que lê esse código
+                    pendingCount = 1;
+                }
+
+                if (pendingCount >= 2) {
+                    // Confiança atingida! Aprova o código.
+                    lastScannedCode = code;
+                    lastScanTime = Date.now();
+                    handleCodeScanned(code, type);
+                    
+                    // Reseta o motor de confiança para a próxima leitura
+                    pendingCode = "";
+                    pendingCount = 0;
+                } else {
+                    // Avisa que achou algo e está validando no próximo frame
+                    statusText.innerText = "Confirmando leitura...";
+                    statusText.className = "status-bar status-warning";
+                }
+            } else {
+                // Se leu lixo (não bateu com as regex), reseta a confiança
+                pendingCode = "";
+                pendingCount = 0;
             }
         }
 
