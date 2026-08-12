@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Expedição OCR Universal - V7 Blindagem Total + Anti-Desfoque</title>
+    <title>Expedição OCR Universal - V8 Mira Sniper</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -15,34 +15,52 @@
         .camera-wrapper { position: relative; width: 100%; height: 260px; background: #000; border-radius: 10px; overflow: hidden; border: 2px solid #38bdf8; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; }
         #video { position: absolute; width: 100%; height: 100%; object-fit: cover; }
         
-        /* MIRA ATUALIZADA - LINHA SUPERIOR É O LASER */
+        /* MIRA ESTILO SCANNER CLÁSSICO */
         .target-box { 
             position: absolute; 
             width: 85%; 
             height: 70px; 
-            border: 2px solid rgba(56, 189, 248, 0.4); /* Bordas suaves */
-            border-top: 3px solid #ef4444; /* Laser Vermelho Forte */
-            border-radius: 4px; 
+            border: 2px solid #38bdf8; 
+            border-radius: 6px; 
             box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65); 
             pointer-events: none; 
             z-index: 10; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .target-box::before { 
-            content: "▼ POSICIONE O CÓDIGO AQUI ▼"; 
+
+        /* LINHA DE LASER ANIMADA NO CENTRO */
+        .laser-line {
+            width: 100%;
+            height: 2px;
+            background-color: #ef4444;
+            box-shadow: 0 0 8px 2px rgba(239, 68, 68, 0.8);
+            animation: pulseLaser 1.5s infinite;
+        }
+
+        @keyframes pulseLaser {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        .target-box::after { 
+            content: "CENTRALIZE O CÓDIGO NO LASER"; 
             position: absolute; 
-            top: -22px; 
+            bottom: -25px; 
             width: 100%; 
             text-align: center; 
-            color: #ef4444; 
+            color: #38bdf8; 
             font-size: 0.65rem; 
-            font-weight: 900; 
-            letter-spacing: 1px;
+            font-weight: bold; 
+            letter-spacing: 0.5px;
         }
 
         .cam-btn { position: absolute; top: 10px; right: 10px; z-index: 20; background: rgba(15,23,42,0.8); border: 1px solid #38bdf8; color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; }
 
         .status-bar { font-size: 0.75rem; text-align: center; color: #4ade80; font-weight: 600; min-height: 20px; margin-bottom: 8px; transition: color 0.2s; }
-        .status-warning { color: #facc15; } /* Cor amarela para desfocado */
+        .status-warning { color: #facc15; }
 
         .panel { background: #172033; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; flex-grow: 1; display: flex; flex-direction: column; }
         .panel-header { font-size: 0.75rem; font-weight: 700; color: #94a3b8; display: flex; justify-content: space-between; margin-bottom: 8px; }
@@ -52,7 +70,6 @@
         .code-text { font-family: monospace; font-size: 0.95rem; font-weight: 700; color: #38bdf8; }
         .code-type { font-size: 0.65rem; background: #334155; padding: 2px 6px; border-radius: 4px; color: #f8fafc; font-weight: bold; }
 
-        /* OVERLAYS DE FEEDBACK CRÍTICO */
         #feedback-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; padding: 20px; }
         .bg-success { background: rgba(22, 101, 52, 0.96); }
         .bg-duplicate { background: rgba(185, 28, 28, 0.98); animation: pulseRed 0.4s infinite; }
@@ -72,7 +89,9 @@
 
     <div class="camera-wrapper">
         <video id="video" playsinline autoplay></video>
-        <div class="target-box"></div>
+        <div class="target-box">
+            <div class="laser-line"></div>
+        </div>
         <button class="cam-btn" onclick="toggleCamera()">🔄 Câmera</button>
     </div>
 
@@ -147,7 +166,7 @@
                     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
                     tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK
                 });
-                statusText.innerText = "Pronto! Aproxime o texto da mira.";
+                statusText.innerText = "Pronto! Centralize o código no laser.";
             } catch (e) {
                 statusText.innerText = "Erro ao iniciar OCR: " + e.message;
             }
@@ -176,7 +195,6 @@
             const box = document.querySelector('.target-box').getBoundingClientRect();
             const vRect = video.getBoundingClientRect();
 
-            // Matemática original perfeita e reta - Apenas a área do Box
             const videoRatio = video.videoWidth / video.videoHeight;
             const elementRatio = vRect.width / vRect.height;
 
@@ -194,13 +212,18 @@
                 offsetX = (scaledWidth - vRect.width) / 2;
             }
 
+            // --- A MIRA SNIPER: Corta APENAS a faixa onde o laser passa ---
+            const ALTURA_CORTE_PERCENTUAL = 0.35; // Apenas 35% do meio da caixa será lido!
+            const alturaRealLeitura = box.height * ALTURA_CORTE_PERCENTUAL;
+            const offsetCentral = (box.height - alturaRealLeitura) / 2; // Pula a parte de cima para focar só no meio
+
             const relX = box.left - vRect.left;
-            const relY = box.top - vRect.top;
+            const relY = (box.top + offsetCentral) - vRect.top; // Desloca a leitura pra linha do laser
 
             const cropX = (relX + offsetX) / scale;
             const cropY = (relY + offsetY) / scale;
             const cropW = box.width / scale;
-            const cropH = box.height / scale;
+            const cropH = alturaRealLeitura / scale; // Restringe a altura da leitura
 
             if (cropW <= 0 || cropH <= 0) return;
 
@@ -210,21 +233,19 @@
 
             const imgData = procCtx.getImageData(0, 0, cropW, cropH);
             
-            // 1. Bloqueia se estiver escuro
             if (isTooDark(imgData)) {
                 statusText.innerText = "Ambiente muito escuro...";
                 statusText.className = "status-bar status-warning";
                 return;
             }
 
-            // 2. Bloqueia se estiver desfocado (Novo!)
             if (isBlurry(imgData)) {
                 statusText.innerText = "Focando imagem...";
                 statusText.className = "status-bar status-warning";
                 return;
             }
 
-            statusText.innerText = "Analisando...";
+            statusText.innerText = "Lendo...";
             statusText.className = "status-bar";
 
             isProcessing = true;
@@ -236,7 +257,7 @@
             } finally {
                 if (document.getElementById('feedback-overlay').style.display !== 'flex') {
                     isProcessing = false;
-                    statusText.innerText = "Pronto! Aproxime o texto da mira.";
+                    statusText.innerText = "Pronto! Centralize o código no laser.";
                 }
             }
         }
@@ -250,7 +271,6 @@
             return (total / (pixels.length / 16)) < 35;
         }
 
-        // MOTOR ANTI-DESFOQUE: Verifica contraste e bordas fortes
         function isBlurry(imgData) {
             const pixels = imgData.data;
             const width = imgData.width;
@@ -258,30 +278,25 @@
             let diffSum = 0;
             let count = 0;
 
-            // Pula pixels para garantir performance e não travar o celular
             for (let y = 0; y < height - 2; y += 2) {
                 for (let x = 0; x < width - 2; x += 2) {
                     const i = (y * width + x) * 4;
                     const right = (y * width + (x + 2)) * 4;
                     const bottom = ((y + 2) * width + x) * 4;
 
-                    // Converte para escala de luminosidade (Luma)
                     const luma = 0.299 * pixels[i] + 0.587 * pixels[i+1] + 0.114 * pixels[i+2];
                     const lumaRight = 0.299 * pixels[right] + 0.587 * pixels[right+1] + 0.114 * pixels[right+2];
                     const lumaBottom = 0.299 * pixels[bottom] + 0.587 * pixels[bottom+1] + 0.114 * pixels[bottom+2];
 
-                    // Calcula a diferença entre o pixel atual e os adjacentes
                     diffSum += Math.abs(luma - lumaRight) + Math.abs(luma - lumaBottom);
                     count += 2;
                 }
             }
             
-            // Score de nitidez (quanto maior, mais focado). Abaixo de 8 costuma ser lixo/borrado.
             const score = diffSum / count;
             return score < 8; 
         }
 
-        // MOTOR V7 - IMUNE À ALUCINAÇÕES E CORTES
         function evaluateText(rawText) {
             const flatText = rawText.replace(/[^A-Z0-9]/g, '');
             let code = null;
