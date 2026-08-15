@@ -8,55 +8,70 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
         body { background-color: #0f172a; color: #f8fafc; padding: 12px; display: flex; flex-direction: column; min-height: 100vh; }
-        header { text-align: center; padding: 12px 0; border-bottom: 1px solid #334155; margin-bottom: 12px; }
+        header { text-align: center; padding: 10px 0; border-bottom: 1px solid #334155; margin-bottom: 10px; }
         h1 { font-size: 1.25rem; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; }
-        .subtitle { font-size: 0.8rem; color: #94a3b8; margin-top: 2px; }
+        
+        /* Chaveador de Modo */
+        .mode-selector { background: #1e293b; border-radius: 10px; border: 1px solid #38bdf8; padding: 10px; margin-bottom: 12px; display: flex; justify-content: space-around; }
+        .mode-option { display: flex; align-items: center; gap: 5px; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
+        .mode-option input[type="radio"] { width: 18px; height: 18px; accent-color: #38bdf8; }
+
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; text-align: center; }
         .stat-value { font-size: 2.2rem; font-weight: 800; color: #f8fafc; line-height: 1.1; }
         .stat-value.highlight { color: #4ade80; }
         .stat-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; margin-top: 4px; }
-        .camera-container { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #38bdf8; margin-bottom: 12px; min-height: 250px; display: flex; align-items: center; justify-content: center; }
+        
+        .camera-container { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #334155; margin-bottom: 12px; min-height: 230px; display: flex; align-items: center; justify-content: center; }
         #reader { width: 100%; }
-        #switch-camera-btn { position: absolute; bottom: 15px; right: 15px; background: rgba(15, 23, 42, 0.85); border: 1px solid #38bdf8; color: #f8fafc; padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; cursor: pointer; z-index: 10; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        #switch-camera-btn { position: absolute; bottom: 15px; right: 15px; background: rgba(15, 23, 42, 0.85); border: 1px solid #38bdf8; color: #f8fafc; padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; cursor: pointer; z-index: 10; display: flex; align-items: center; gap: 6px; }
+        
         #feedback-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; padding: 20px; animation: pulse 0.2s ease-in-out; }
         #feedback-overlay.success { background-color: rgba(22, 101, 52, 0.95); }
         #feedback-overlay.error { background-color: rgba(153, 27, 27, 0.98); }
         .feedback-title { font-size: 2rem; font-weight: 900; color: #fff; margin-bottom: 8px; text-transform: uppercase; }
         .feedback-code { font-size: 1.2rem; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 8px; word-break: break-all; color: #f8fafc; font-family: monospace; }
+        
         .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .btn { background: #3b82f6; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
         .btn-success { background: #16a34a; } .btn-danger { background: #dc2626; }
-        .list-container { background: #1e293b; border-radius: 10px; border: 1px solid #334155; padding: 12px; flex-grow: 1; display: flex; flex-direction: column; max-height: 250px; }
+        
+        .list-container { background: #1e293b; border-radius: 10px; border: 1px solid #334155; padding: 12px; flex-grow: 1; display: flex; flex-direction: column; max-height: 220px; }
         .list-header { font-size: 0.85rem; font-weight: 700; color: #94a3b8; margin-bottom: 8px; display: flex; justify-content: space-between; }
         .scanned-list { list-style: none; overflow-y: auto; flex-grow: 1; }
         .scanned-item { background: #0f172a; border: 1px solid #334155; padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
         .scanned-code { font-family: monospace; font-weight: 600; color: #38bdf8; }
         .scanned-time { font-size: 0.75rem; color: #64748b; }
-        .settings-box { background: #1e293b; border-radius: 10px; border: 1px solid #334155; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        
         @keyframes pulse { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>📦 Conferencia de Pacotes</h1>
-        <div class="subtitle">Expedição Normal & FULL</div>
+        <h1>📦 Conferencia Multi-Modo</h1>
     </header>
 
-    <div class="settings-box">
-        <input type="checkbox" id="chk-picking" style="width: 22px; height: 22px; accent-color: #4ade80;">
-        <label for="chk-picking" style="color: #4ade80; font-weight: bold; font-size: 0.9rem;">Modo FULL Picking<br><span style="font-size: 0.7rem; color: #94a3b8;">(Permitir bipar produtos repetidos)</span></label>
+    <!-- SELETOR DE MODO -->
+    <div class="mode-selector">
+        <label class="mode-option">
+            <input type="radio" name="op-modo" value="NORMAL" checked onchange="changeMode()"> 
+            Normal (Diário)
+        </label>
+        <label class="mode-option" style="color: #ffcc00;">
+            <input type="radio" name="op-modo" value="FULL" onchange="changeMode()"> 
+            FULL (Contínuo)
+        </label>
     </div>
 
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-value highlight" id="count-total">0</div>
-            <div class="stat-label">Conferidos Hoje</div>
+            <div class="stat-label">Conferidos (<span id="lbl-modo-atual">Normal</span>)</div>
         </div>
         <div class="stat-card">
             <div class="stat-value" id="count-meta">--</div>
-            <div class="stat-label" id="label-meta">Meta do Dia</div>
+            <div class="stat-label">Meta do Lote</div>
         </div>
     </div>
 
@@ -73,7 +88,7 @@
     <div class="list-container">
         <div class="list-header">
             <span>ÚLTIMAS BIPAGENS</span>
-            <span style="color: #4ade80; font-size: 0.75rem;">● Nuvem Sincronizada</span>
+            <span style="color: #4ade80; font-size: 0.75rem;">● Sincronizado</span>
         </div>
         <ul class="scanned-list" id="scanned-list"></ul>
     </div>
@@ -85,7 +100,7 @@
 
     <script>
         // ==========================================
-        // CONFIGURAÇÃO DO GOOGLE SHEETS (EMBUTIDA)
+        // CONFIGURAÇÃO DO GOOGLE SHEETS
         // ==========================================
         const WEBHOOK_URL_FIXA = "COLE_SUA_URL_AQUI"; 
         
@@ -93,8 +108,7 @@
 
         function playBeepSuccess() {
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
             osc.type = 'sine'; osc.frequency.setValueAtTime(1200, audioCtx.currentTime); 
             gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
             osc.connect(gain); gain.connect(audioCtx.destination);
@@ -103,33 +117,47 @@
 
         function playBeepError() {
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
             osc.type = 'sawtooth'; osc.frequency.setValueAtTime(180, audioCtx.currentTime); 
             gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
             osc.connect(gain); gain.connect(audioCtx.destination);
             osc.start(); osc.stop(audioCtx.currentTime + 0.6);
         }
 
-        // AGORA É UM ARRAY PARA PERMITIR REPETIDOS
+        // Estado do App
         let scannedCodes = []; 
         let html5QrcodeScanner = null;
         let isProcessing = false;
         let currentFacingMode = "environment"; 
 
+        // DOIS CÉREBROS DE MEMÓRIA (O Segredo do Canivete Suíço)
         const todayStr = new Date().toISOString().split('T')[0];
-        const STORAGE_KEY = 'conferencia_ml_' + todayStr;
+        const KEY_NORMAL = 'conferencia_ml_normal_' + todayStr; // Zera meia noite
+        const KEY_FULL = 'conferencia_ml_full_persistente'; // Não zera nunca sozinho
+
+        function getActiveKey() {
+            const isFull = document.querySelector('input[name="op-modo"]:checked').value === 'FULL';
+            return isFull ? KEY_FULL : KEY_NORMAL;
+        }
 
         window.onload = function() { loadSavedData(); initScanner(); };
 
+        function changeMode() {
+            const isFull = document.querySelector('input[name="op-modo"]:checked').value === 'FULL';
+            document.getElementById('lbl-modo-atual').innerText = isFull ? 'FULL' : 'Normal';
+            // Muda a cor da câmera para o usuário saber que mudou
+            document.querySelector('.camera-container').style.borderColor = isFull ? '#ffcc00' : '#38bdf8';
+            loadSavedData(); // Carrega a memória certa
+        }
+
         function loadSavedData() {
-            const rawData = localStorage.getItem(STORAGE_KEY);
-            if (rawData) { scannedCodes = JSON.parse(rawData); }
+            const rawData = localStorage.getItem(getActiveKey());
+            scannedCodes = rawData ? JSON.parse(rawData) : [];
             updateUI();
         }
 
         function saveData() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(scannedCodes));
+            localStorage.setItem(getActiveKey(), JSON.stringify(scannedCodes));
         }
 
         function initScanner() {
@@ -140,7 +168,7 @@
 
         function toggleCamera() {
             const btn = document.getElementById('switch-camera-btn');
-            btn.innerHTML = "⏳ Trocando...";
+            btn.innerHTML = "⏳...";
             if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
                 html5QrcodeScanner.stop().then(() => {
                     currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
@@ -156,11 +184,11 @@
             const cleanCode = decodedText.trim();
             const timeNow = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             
-            const isPickingMode = document.getElementById('chk-picking').checked;
+            const isFullMode = document.querySelector('input[name="op-modo"]:checked').value === 'FULL';
             const isDuplicate = scannedCodes.some(item => item.code === cleanCode);
 
-            // Se for duplicado e NÃO estiver no modo Picking
-            if (isDuplicate && !isPickingMode) {
+            // Bloqueia duplicado APENAS se estiver no modo NORMAL
+            if (isDuplicate && !isFullMode) {
                 playBeepError();
                 showOverlay('error', '⚠️ DUPLICADO!', cleanCode);
             } else {
@@ -186,7 +214,6 @@
             document.getElementById('count-total').innerText = scannedCodes.length;
             const listEl = document.getElementById('scanned-list');
             listEl.innerHTML = '';
-            // Copia e inverte para mostrar o mais recente no topo
             const items = [...scannedCodes].reverse();
             items.forEach(item => {
                 const li = document.createElement('li');
@@ -201,21 +228,25 @@
             const formData = new URLSearchParams();
             formData.append('action', 'bipar'); formData.append('codigo', code); formData.append('horario', time); formData.append('data', todayStr);
             fetch(WEBHOOK_URL_FIXA, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData.toString() })
-            .catch(err => console.error("Erro de rede:", err));
+            .catch(err => console.error(err));
         }
 
         function exportCSV() {
-            if (scannedCodes.length === 0) return alert("Nenhum pacote conferido!");
+            if (scannedCodes.length === 0) return alert("Nenhum pacote na memória selecionada!");
             let csvContent = "data:text/csv;charset=utf-8,Data,Hora,Codigo_Pacote\n";
             scannedCodes.forEach(item => { csvContent += `${todayStr},${item.time},"${item.code}"\n`; });
             const link = document.createElement("a");
-            link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", `conferencia_${todayStr}.csv`);
+            const nomeLote = document.querySelector('input[name="op-modo"]:checked').value;
+            link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", `lote_${nomeLote}_${todayStr}.csv`);
             document.body.appendChild(link); link.click(); document.body.removeChild(link);
         }
 
         function clearData() {
-            if (confirm("Limpar o lote de hoje?")) {
-                scannedCodes = []; localStorage.removeItem(STORAGE_KEY); updateUI();
+            const nomeLote = document.querySelector('input[name="op-modo"]:checked').value;
+            if (confirm(`Tem certeza que deseja apagar a memória do modo ${nomeLote}? Isso não apagará o outro modo.`)) {
+                scannedCodes = []; 
+                localStorage.removeItem(getActiveKey()); 
+                updateUI();
             }
         }
     </script>
