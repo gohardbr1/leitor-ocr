@@ -224,7 +224,7 @@
         }
 
         function sendToGoogleSheets(code, time) {
-            if (!WEBHOOK_URL_FIXA || WEBHOOK_URL_FIXA === "COLE_SUA_URL_AQUI") return;
+            if (!WEBHOOK_URL_FIXA || WEBHOOK_URL_FIXA === "https://script.google.com/macros/s/AKfycbwE4ovN8IgXd0NAZeYkYIpd3s4tQ6iTG8cql6Y3K1KWsHSELM9CQDMm_0I7wr8d_ZRT/exec") return;
             
             // O SEGREDO: Montamos uma URL contendo os dados do pacote
             const urlComDados = `${WEBHOOK_URL_FIXA}?action=bipar&codigo=${encodeURIComponent(code)}&horario=${encodeURIComponent(time)}&data=${encodeURIComponent(todayStr)}`;
