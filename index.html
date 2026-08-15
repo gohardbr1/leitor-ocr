@@ -224,11 +224,16 @@
         }
 
         function sendToGoogleSheets(code, time) {
-            if (!WEBHOOK_URL_FIXA || WEBHOOK_URL_FIXA === "https://script.google.com/macros/s/AKfycbwE4ovN8IgXd0NAZeYkYIpd3s4tQ6iTG8cql6Y3K1KWsHSELM9CQDMm_0I7wr8d_ZRT/exec") return;
-            const formData = new URLSearchParams();
-            formData.append('action', 'bipar'); formData.append('codigo', code); formData.append('horario', time); formData.append('data', todayStr);
-            fetch(WEBHOOK_URL_FIXA, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData.toString() })
-            .catch(err => console.error(err));
+            if (!WEBHOOK_URL_FIXA || WEBHOOK_URL_FIXA === "COLE_SUA_URL_AQUI") return;
+            
+            // O SEGREDO: Montamos uma URL contendo os dados do pacote
+            const urlComDados = `${WEBHOOK_URL_FIXA}?action=bipar&codigo=${encodeURIComponent(code)}&horario=${encodeURIComponent(time)}&data=${encodeURIComponent(todayStr)}`;
+
+            // O navegador dispara um GET invisível. Zero chance de bloqueio.
+            fetch(urlComDados, {
+                method: 'GET',
+                mode: 'no-cors'
+            }).catch(err => console.error(err));
         }
 
         function exportCSV() {
