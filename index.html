@@ -197,7 +197,7 @@
         }
 
         function sendToGoogleSheets(code, time) {
-            if (!WEBHOOK_URL_FIXA || WEBHOOK_URL_FIXA === "COLE_SUA_URL_AQUI") return;
+            if (!WEBHOOK_URL_FIXA || WEBHOOK_URL_FIXA === "https://script.google.com/macros/s/AKfycbwvUgowBVXITDTaSBajCTSZLh_hBaZZNKEruFtqwwORbLgpmCLKQpk__gRIOkmkC_vf/exec") return;
             const formData = new URLSearchParams();
             formData.append('action', 'bipar'); formData.append('codigo', code); formData.append('horario', time); formData.append('data', todayStr);
             fetch(WEBHOOK_URL_FIXA, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData.toString() })
