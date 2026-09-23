@@ -3,75 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Conferência de Expedição & FULL</title>
+    <title>Leitor Multi-Armazém</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
         body { background-color: #0f172a; color: #f8fafc; padding: 12px; display: flex; flex-direction: column; min-height: 100vh; }
-        header { text-align: center; padding: 10px 0; border-bottom: 1px solid #334155; margin-bottom: 10px; }
-        h1 { font-size: 1.25rem; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; }
+        header { text-align: center; padding: 12px 0; border-bottom: 1px solid #334155; margin-bottom: 12px; }
+        h1 { font-size: 1.25rem; color: #38bdf8; text-transform: uppercase; }
         
-        /* Chaveador de Modo */
-        .mode-selector { background: #1e293b; border-radius: 10px; border: 1px solid #38bdf8; padding: 10px; margin-bottom: 12px; display: flex; justify-content: space-around; }
-        .mode-option { display: flex; align-items: center; gap: 5px; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
-        .mode-option input[type="radio"] { width: 18px; height: 18px; accent-color: #38bdf8; }
-
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; text-align: center; }
-        .stat-value { font-size: 2.2rem; font-weight: 800; color: #f8fafc; line-height: 1.1; }
-        .stat-value.highlight { color: #4ade80; }
+        .stat-value { font-size: 2.2rem; font-weight: 800; color: #4ade80; line-height: 1.1; }
         .stat-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; margin-top: 4px; }
         
-        .camera-container { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #334155; margin-bottom: 12px; min-height: 230px; display: flex; align-items: center; justify-content: center; }
+        .camera-container { position: relative; background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #38bdf8; margin-bottom: 12px; min-height: 250px; display: flex; align-items: center; justify-content: center; }
         #reader { width: 100%; }
-        #switch-camera-btn { position: absolute; bottom: 15px; right: 15px; background: rgba(15, 23, 42, 0.85); border: 1px solid #38bdf8; color: #f8fafc; padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; cursor: pointer; z-index: 10; display: flex; align-items: center; gap: 6px; }
+        #switch-camera-btn { position: absolute; bottom: 15px; right: 15px; background: rgba(15, 23, 42, 0.85); border: 1px solid #38bdf8; color: #f8fafc; padding: 10px 14px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; cursor: pointer; z-index: 10; }
         
-        #feedback-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; padding: 20px; animation: pulse 0.2s ease-in-out; }
+        #feedback-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; text-align: center; padding: 20px; }
         #feedback-overlay.success { background-color: rgba(22, 101, 52, 0.95); }
         #feedback-overlay.error { background-color: rgba(153, 27, 27, 0.98); }
-        .feedback-title { font-size: 2rem; font-weight: 900; color: #fff; margin-bottom: 8px; text-transform: uppercase; }
-        .feedback-code { font-size: 1.2rem; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 8px; word-break: break-all; color: #f8fafc; font-family: monospace; }
+        .feedback-title { font-size: 2rem; font-weight: 900; color: #fff; margin-bottom: 8px; }
+        .feedback-code { font-size: 1.2rem; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 8px; color: #f8fafc; font-family: monospace; }
         
         .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-        .btn { background: #3b82f6; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .btn { padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; border: none; color: white; }
         .btn-success { background: #16a34a; } .btn-danger { background: #dc2626; }
         
-        .list-container { background: #1e293b; border-radius: 10px; border: 1px solid #334155; padding: 12px; flex-grow: 1; display: flex; flex-direction: column; max-height: 220px; }
+        .list-container { background: #1e293b; border-radius: 10px; border: 1px solid #334155; padding: 12px; flex-grow: 1; display: flex; flex-direction: column; max-height: 250px; }
         .list-header { font-size: 0.85rem; font-weight: 700; color: #94a3b8; margin-bottom: 8px; display: flex; justify-content: space-between; }
-        .scanned-list { list-style: none; overflow-y: auto; flex-grow: 1; }
-        .scanned-item { background: #0f172a; border: 1px solid #334155; padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
+        .scanned-list { list-style: none; overflow-y: auto; flex-grow: 1; margin-bottom: 5px;}
+        .scanned-item { background: #0f172a; border: 1px solid #334155; padding: 8px; border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; font-size: 0.85rem; }
         .scanned-code { font-family: monospace; font-weight: 600; color: #38bdf8; }
-        .scanned-time { font-size: 0.75rem; color: #64748b; }
-        
-        @keyframes pulse { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .scanned-time { color: #64748b; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>📦 Conferencia Multi-Modo</h1>
+        <h1>📦 Conferencia Multi-Local</h1>
     </header>
-
-    <!-- SELETOR DE MODO -->
-    <div class="mode-selector">
-        <label class="mode-option">
-            <input type="radio" name="op-modo" value="NORMAL" checked onchange="changeMode()"> 
-            Normal (Diário)
-        </label>
-        <label class="mode-option" style="color: #ffcc00;">
-            <input type="radio" name="op-modo" value="FULL" onchange="changeMode()"> 
-            FULL (Contínuo)
-        </label>
-    </div>
 
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-value highlight" id="count-total">0</div>
-            <div class="stat-label">Conferidos (<span id="lbl-modo-atual">Normal</span>)</div>
+            <div class="stat-value" id="count-total">0</div>
+            <div class="stat-label">Conferidos Hoje</div>
         </div>
         <div class="stat-card">
             <div class="stat-value" id="count-meta">--</div>
-            <div class="stat-label">Meta do Lote</div>
+            <div class="stat-label">Meta Diária</div>
         </div>
     </div>
 
@@ -81,14 +61,14 @@
     </div>
 
     <div class="actions-grid">
-        <button class="btn btn-success" onclick="exportCSV()">📥 Baixar CSV</button>
-        <button class="btn btn-danger" onclick="clearData()">🗑️ Limpar Lote</button>
+        <button class="btn btn-success" onclick="exportCSV()">📥 Baixar Relatório</button>
+        <button class="btn btn-danger" onclick="clearData()">🗑️ Limpar Aparelho</button>
     </div>
 
     <div class="list-container">
         <div class="list-header">
-            <span>ÚLTIMAS BIPAGENS</span>
-            <span style="color: #4ade80; font-size: 0.75rem;">● Sincronizado</span>
+            <span>ÚLTIMOS PACOTES</span>
+            <span style="color: #4ade80; font-size: 0.75rem;">● Nuvem Ativa</span>
         </div>
         <ul class="scanned-list" id="scanned-list"></ul>
     </div>
@@ -99,70 +79,49 @@
     </div>
 
     <script>
-        // ==========================================
-        // CONFIGURAÇÃO DO GOOGLE SHEETS
-        // ==========================================
-        const WEBHOOK_URL_FIXA = "COLE_SUA_URL_AQUI"; 
+        const WEBHOOK_URL_FIXA = "https://script.google.com/macros/s/AKfycbwE4ovN8IgXd0NAZeYkYIpd3s4tQ6iTG8cql6Y3K1KWsHSELM9CQDMm_0I7wr8d_ZRT/exec"; 
         
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
         function playBeepSuccess() {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
             osc.type = 'sine'; osc.frequency.setValueAtTime(1200, audioCtx.currentTime); 
-            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime); osc.connect(gain); gain.connect(audioCtx.destination);
             osc.start(); osc.stop(audioCtx.currentTime + 0.15);
         }
-
         function playBeepError() {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
             osc.type = 'sawtooth'; osc.frequency.setValueAtTime(180, audioCtx.currentTime); 
-            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime); osc.connect(gain); gain.connect(audioCtx.destination);
             osc.start(); osc.stop(audioCtx.currentTime + 0.6);
         }
 
-        // Estado do App
-        let scannedCodes = []; 
+        let scannedCodes = new Map(); 
         let html5QrcodeScanner = null;
         let isProcessing = false;
         let currentFacingMode = "environment"; 
 
-        // DOIS CÉREBROS DE MEMÓRIA (O Segredo do Canivete Suíço)
         const todayStr = new Date().toISOString().split('T')[0];
-        const KEY_NORMAL = 'conferencia_ml_normal_' + todayStr; // Zera meia noite
-        const KEY_FULL = 'conferencia_ml_full_persistente'; // Não zera nunca sozinho
-
-        function getActiveKey() {
-            const isFull = document.querySelector('input[name="op-modo"]:checked').value === 'FULL';
-            return isFull ? KEY_FULL : KEY_NORMAL;
-        }
+        const STORAGE_KEY = 'conferencia_ml_' + todayStr;
 
         window.onload = function() { loadSavedData(); initScanner(); };
 
-        function changeMode() {
-            const isFull = document.querySelector('input[name="op-modo"]:checked').value === 'FULL';
-            document.getElementById('lbl-modo-atual').innerText = isFull ? 'FULL' : 'Normal';
-            // Muda a cor da câmera para o usuário saber que mudou
-            document.querySelector('.camera-container').style.borderColor = isFull ? '#ffcc00' : '#38bdf8';
-            loadSavedData(); // Carrega a memória certa
-        }
-
         function loadSavedData() {
-            const rawData = localStorage.getItem(getActiveKey());
-            scannedCodes = rawData ? JSON.parse(rawData) : [];
+            const rawData = localStorage.getItem(STORAGE_KEY);
+            if (rawData) JSON.parse(rawData).forEach(item => scannedCodes.set(item.code, item.time));
             updateUI();
         }
 
         function saveData() {
-            localStorage.setItem(getActiveKey(), JSON.stringify(scannedCodes));
+            const arr = Array.from(scannedCodes.entries()).map(([code, time]) => ({ code, time }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
         }
 
         function initScanner() {
             if (!html5QrcodeScanner) html5QrcodeScanner = new Html5Qrcode("reader");
-            const config = { fps: 15, qrbox: { width: 260, height: 160 }, aspectRatio: 1.0 };
+            // Motor Turbo 30 fps
+            const config = { fps: 30, qrbox: { width: 280, height: 150 }, aspectRatio: 1.0 };
             html5QrcodeScanner.start({ facingMode: currentFacingMode }, config, onScanSuccess).catch(err => console.error(err));
         }
 
@@ -181,26 +140,17 @@
             if (isProcessing) return;
             isProcessing = true;
 
-            const cleanCode = decodedText.trim();
+            const cleanCode = decodedText.trim().toUpperCase();
             const timeNow = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            
-            const isFullMode = document.querySelector('input[name="op-modo"]:checked').value === 'FULL';
-            const isDuplicate = scannedCodes.some(item => item.code === cleanCode);
 
-            // Bloqueia duplicado APENAS se estiver no modo NORMAL
-            if (isDuplicate && !isFullMode) {
-                playBeepError();
-                showOverlay('error', '⚠️ DUPLICADO!', cleanCode);
+            if (scannedCodes.has(cleanCode)) {
+                playBeepError(); showOverlay('error', '⚠️ DUPLICADO!', cleanCode);
             } else {
-                scannedCodes.push({ code: cleanCode, time: timeNow });
-                saveData();
-                playBeepSuccess();
-                showOverlay('success', '✓ CONFERIDO', cleanCode);
-                sendToGoogleSheets(cleanCode, timeNow);
-                updateUI();
+                scannedCodes.set(cleanCode, timeNow);
+                saveData(); playBeepSuccess(); showOverlay('success', '✓ CONFERIDO', cleanCode);
+                sendToGoogleSheets(cleanCode, timeNow); updateUI();
             }
-
-            setTimeout(() => { isProcessing = false; }, 1800); 
+            setTimeout(() => { isProcessing = false; }, 1000); 
         }
 
         function showOverlay(type, title, code) {
@@ -211,47 +161,44 @@
         }
 
         function updateUI() {
-            document.getElementById('count-total').innerText = scannedCodes.length;
-            const listEl = document.getElementById('scanned-list');
-            listEl.innerHTML = '';
-            const items = [...scannedCodes].reverse();
-            items.forEach(item => {
-                const li = document.createElement('li');
-                li.className = 'scanned-item';
-                li.innerHTML = `<span class="scanned-code">${item.code}</span><span class="scanned-time">${item.time}</span>`;
+            document.getElementById('count-total').innerText = scannedCodes.size;
+            const listEl = document.getElementById('scanned-list'); listEl.innerHTML = '';
+            Array.from(scannedCodes.entries()).reverse().forEach(([code, time]) => {
+                const li = document.createElement('li'); li.className = 'scanned-item';
+                li.innerHTML = `<span class="scanned-code">${code}</span><span class="scanned-time">${time}</span>`;
                 listEl.appendChild(li);
             });
         }
 
         function sendToGoogleSheets(code, time) {
-            if (!WEBHOOK_URL_FIXA || WEBHOOK_URL_FIXA === "https://script.google.com/macros/s/AKfycbwE4ovN8IgXd0NAZeYkYIpd3s4tQ6iTG8cql6Y3K1KWsHSELM9CQDMm_0I7wr8d_ZRT/exec") return;
+            if (!WEBHOOK_URL_FIXA || WEBHOOK_URL_FIXA === "COLE_AQUI_A_NOVA_URL_DO_APPS_SCRIPT") return;
             
-            // O SEGREDO: Montamos uma URL contendo os dados do pacote
-            const urlComDados = `${WEBHOOK_URL_FIXA}?action=bipar&codigo=${encodeURIComponent(code)}&horario=${encodeURIComponent(time)}&data=${encodeURIComponent(todayStr)}`;
+            const formData = new URLSearchParams();
+            formData.append('action', 'bipar');
+            formData.append('codigo', code);
+            formData.append('horario', time);
+            formData.append('data', todayStr);
 
-            // O navegador dispara um GET invisível. Zero chance de bloqueio.
-            fetch(urlComDados, {
-                method: 'GET',
-                mode: 'no-cors'
-            }).catch(err => console.error(err));
+            fetch(WEBHOOK_URL_FIXA, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData.toString()
+            }).catch(err => console.error("Erro na nuvem:", err));
         }
 
         function exportCSV() {
-            if (scannedCodes.length === 0) return alert("Nenhum pacote na memória selecionada!");
+            if (scannedCodes.size === 0) return alert("Nenhum pacote conferido hoje ainda!");
             let csvContent = "data:text/csv;charset=utf-8,Data,Hora,Codigo_Pacote\n";
-            scannedCodes.forEach(item => { csvContent += `${todayStr},${item.time},"${item.code}"\n`; });
-            const link = document.createElement("a");
-            const nomeLote = document.querySelector('input[name="op-modo"]:checked').value;
-            link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", `lote_${nomeLote}_${todayStr}.csv`);
-            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            scannedCodes.forEach((time, code) => { csvContent += `${todayStr},${time},"${code}"\n`; });
+            const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", `lote_${todayStr}.csv`); document.body.appendChild(link);
+            link.click(); document.body.removeChild(link);
         }
 
         function clearData() {
-            const nomeLote = document.querySelector('input[name="op-modo"]:checked').value;
-            if (confirm(`Tem certeza que deseja apagar a memória do modo ${nomeLote}? Isso não apagará o outro modo.`)) {
-                scannedCodes = []; 
-                localStorage.removeItem(getActiveKey()); 
-                updateUI();
+            if (confirm("Resetar a contagem deste aparelho? Apenas o celular será zerado.")) {
+                scannedCodes.clear(); localStorage.removeItem(STORAGE_KEY); updateUI();
             }
         }
     </script>
