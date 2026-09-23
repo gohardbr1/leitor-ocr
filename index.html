@@ -11,7 +11,8 @@
         header { text-align: center; padding: 12px 0; border-bottom: 1px solid #334155; margin-bottom: 12px; }
         h1 { font-size: 1.25rem; color: #38bdf8; text-transform: uppercase; }
         
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+        /* Grelha ajustada para 1 única coluna centralizada */
+        .stats-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 12px; }
         .stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; text-align: center; }
         .stat-value { font-size: 2.2rem; font-weight: 800; color: #4ade80; line-height: 1.1; }
         .stat-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; margin-top: 4px; }
@@ -26,9 +27,10 @@
         .feedback-title { font-size: 2rem; font-weight: 900; color: #fff; margin-bottom: 8px; }
         .feedback-code { font-size: 1.2rem; background: rgba(0,0,0,0.4); padding: 8px 16px; border-radius: 8px; color: #f8fafc; font-family: monospace; }
         
-        .actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+        /* Grelha ajustada para 1 única coluna centralizada */
+        .actions-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 12px; }
         .btn { padding: 12px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; border: none; color: white; }
-        .btn-success { background: #16a34a; } .btn-danger { background: #dc2626; }
+        .btn-danger { background: #dc2626; }
         
         .list-container { background: #1e293b; border-radius: 10px; border: 1px solid #334155; padding: 12px; flex-grow: 1; display: flex; flex-direction: column; max-height: 250px; }
         .list-header { font-size: 0.85rem; font-weight: 700; color: #94a3b8; margin-bottom: 8px; display: flex; justify-content: space-between; }
@@ -44,14 +46,11 @@
         <h1>📦 Conferencia Multi-Local</h1>
     </header>
 
+    <!-- Removido o cartão de meta diária -->
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-value" id="count-total">0</div>
             <div class="stat-label">Conferidos Hoje</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-value" id="count-meta">--</div>
-            <div class="stat-label">Meta Diária</div>
         </div>
     </div>
 
@@ -60,8 +59,8 @@
         <button id="switch-camera-btn" onclick="toggleCamera()">🔄 Girar Câmera</button>
     </div>
 
+    <!-- Removido o botão de relatório -->
     <div class="actions-grid">
-        <button class="btn btn-success" onclick="exportCSV()">📥 Baixar Relatório</button>
         <button class="btn btn-danger" onclick="clearData()">🗑️ Limpar Aparelho</button>
     </div>
 
@@ -79,6 +78,7 @@
     </div>
 
     <script>
+        // COLE A SUA URL AQUI
         const WEBHOOK_URL_FIXA = "https://script.google.com/macros/s/AKfycbwE4ovN8IgXd0NAZeYkYIpd3s4tQ6iTG8cql6Y3K1KWsHSELM9CQDMm_0I7wr8d_ZRT/exec"; 
         
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -185,15 +185,6 @@
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: formData.toString()
             }).catch(err => console.error("Erro na nuvem:", err));
-        }
-
-        function exportCSV() {
-            if (scannedCodes.size === 0) return alert("Nenhum pacote conferido hoje ainda!");
-            let csvContent = "data:text/csv;charset=utf-8,Data,Hora,Codigo_Pacote\n";
-            scannedCodes.forEach((time, code) => { csvContent += `${todayStr},${time},"${code}"\n`; });
-            const link = document.createElement("a"); link.setAttribute("href", encodeURI(csvContent));
-            link.setAttribute("download", `lote_${todayStr}.csv`); document.body.appendChild(link);
-            link.click(); document.body.removeChild(link);
         }
 
         function clearData() {
