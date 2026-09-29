@@ -75,7 +75,7 @@
 
     <script>
         // COLE A SUA URL AQUI
-        const WEBHOOK_URL_FIXA = "https://script.google.com/macros/s/AKfycbwE4ovN8IgXd0NAZeYkYIpd3s4tQ6iTG8cql6Y3K1KWsHSELM9CQDMm_0I7wr8d_ZRT/exec"; 
+        const WEBHOOK_URL_FIXA = "COLE_AQUI_A_NOVA_URL_DO_APPS_SCRIPT"; 
         
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         function playBeepSuccess() {
@@ -116,7 +116,6 @@
 
         function initScanner() {
             if (!html5QrcodeScanner) {
-                // A restrição foi movida para cá! O Leitor já nasce bloqueado para códigos de barras.
                 html5QrcodeScanner = new Html5Qrcode("reader", {
                     formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
                 });
@@ -149,8 +148,8 @@
             const cleanCode = decodedText.trim().toUpperCase();
             const timeNow = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-            // Trava contra os QR Codes Fiscais/Roteirização que resultam em strings JSON
-            if (cleanCode.startsWith("{") || cleanCode.includes('{"ID"')) {
+            // Trava contra os QR Codes Fiscais/Roteirização e códigos numéricos de exatamente 15 dígitos
+            if (cleanCode.startsWith("{") || cleanCode.includes('{"ID"') || /^\d{15}$/.test(cleanCode)) {
                 playBeepError(); 
                 showOverlay('error', '⚠️ QR INVÁLIDO', 'Leia o QR Principal');
                 setTimeout(() => { isProcessing = false; }, 1200);
